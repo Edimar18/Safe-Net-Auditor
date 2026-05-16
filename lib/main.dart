@@ -158,7 +158,7 @@ class _AppHeaderState extends State<_AppHeader>
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '[ SAFE-NET AUDITOR v1.0 ]',
+                      '[ SAFE-NET AUDITOR | IT3R2]',
                       style: GoogleFonts.spaceMono(
                         color: Colors.white,
                         fontSize: 13,

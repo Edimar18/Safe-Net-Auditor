@@ -15,7 +15,7 @@ class TrustScoreGauge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 160,
+      height: 200,
       child: CustomPaint(
         painter: _GaugePainter(score: score, color: _color),
         child: Center(
