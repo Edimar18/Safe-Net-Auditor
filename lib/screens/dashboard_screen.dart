@@ -233,24 +233,34 @@ class _PacketBarGraph extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final max = history.fold(1.0, (a, b) => a > b ? a : b);
+    final maxVal = history.isEmpty ? 1.0 : history.fold(0.0, (a, b) => a > b ? a : b);
+    final hasData = maxVal > 0;
+
     return SizedBox(
       height: 70,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: history.map((v) {
-          final h = (v / max) * 68;
-          return Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 0.5),
-              child: Container(
-                height: h.clamp(1.0, 68.0),
-                color: Colors.white,
+      child: hasData
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: history.map((v) {
+                final h = maxVal > 0 ? (v / maxVal) * 68 : 1.0;
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 0.5),
+                    child: Container(
+                      height: h.clamp(2.0, 68.0),
+                      color: v > 0 ? Colors.white : Colors.white10,
+                    ),
+                  ),
+                );
+              }).toList(),
+            )
+          : Center(
+              child: MonoText(
+                '>> WAITING FOR ESP32 DATA...',
+                fontSize: 10,
+                color: Colors.white24,
               ),
             ),
-          );
-        }).toList(),
-      ),
     );
   }
 }

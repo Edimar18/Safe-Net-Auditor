@@ -103,6 +103,7 @@ class AuditorScreen extends StatelessWidget {
               child: Column(
                 children: net.networks.map((n) {
                   final isRisky = n.ouiVendor.toUpperCase().contains('ESPRESSIF');
+                  final trusted = net.isTrusted(n.bssid);
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 10),
                     child: Column(
@@ -127,6 +128,43 @@ class AuditorScreen extends StatelessWidget {
                                   color: Colors.black,
                                   fontSize: 9,
                                   fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            const Spacer(),
+                            GestureDetector(
+                              onTap: () {
+                                if (trusted) {
+                                  net.removeTrustedNetwork(n.bssid);
+                                } else {
+                                  net.addTrustedNetwork(n.bssid, n.ssid.isEmpty ? n.bssid : n.ssid);
+                                }
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 120),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: trusted ? const Color(0xFF39FF14) : Colors.black,
+                                  border: Border.all(color: trusted ? const Color(0xFF39FF14) : Colors.white54, width: 1),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      trusted ? Icons.shield : Icons.shield_outlined,
+                                      color: trusted ? Colors.black : Colors.white54,
+                                      size: 12,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      trusted ? '[ TRUSTED ]' : '[ TRUST ]',
+                                      style: GoogleFonts.spaceMono(
+                                        color: trusted ? Colors.black : Colors.white54,
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),

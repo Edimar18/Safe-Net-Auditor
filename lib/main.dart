@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'providers/network_provider.dart';
+import 'services/serial_service.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/auditor_screen.dart';
 import 'screens/spectrum_screen.dart';
@@ -135,45 +136,60 @@ class _AppHeaderState extends State<_AppHeader> with SingleTickerProviderStateMi
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: Colors.black,
-      child: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Row(
-                children: [
-                  const Icon(Icons.wifi_tethering, color: Colors.white, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '[ SAFE-NET AUDITOR | IT3R2]',
-                      style: GoogleFonts.spaceMono(
-                        color: Colors.white, fontSize: 13,
-                        fontWeight: FontWeight.bold, letterSpacing: 1,
-                      ),
-                    ),
-                  ),
-                  Row(
+    return Consumer<NetworkProvider>(
+      builder: (ctx, net, _) {
+        String statusLine;
+        if (net.isConnected) {
+          statusLine = 'STATUS:\nSNIFFING';
+        } else if (net.serialState == SerialState.connecting) {
+          statusLine = 'STATUS:\nCONNECTING';
+        } else if (net.serialState == SerialState.error) {
+          statusLine = 'STATUS:\nERROR';
+        } else {
+          statusLine = 'STATUS:\nDISCONNECTED';
+        }
+
+        return Container(
+          color: Colors.black,
+          child: SafeArea(
+            bottom: false,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Row(
                     children: [
-                      Text('STATUS:\nSNIFFING',
-                        style: GoogleFonts.spaceMono(color: Colors.white, fontSize: 9, height: 1.3),
-                        textAlign: TextAlign.right,
+                      const Icon(Icons.wifi_tethering, color: Colors.white, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '[ SAFE-NET AUDITOR | IT3R2]',
+                          style: GoogleFonts.spaceMono(
+                            color: Colors.white, fontSize: 13,
+                            fontWeight: FontWeight.bold, letterSpacing: 1,
+                          ),
+                        ),
                       ),
-                      const SizedBox(width: 4),
-                      Text(_cursorVisible ? '█' : ' ',
-                        style: GoogleFonts.spaceMono(color: const Color(0xFF39FF14), fontSize: 14)),
+                      Row(
+                        children: [
+                          Text(statusLine,
+                            style: GoogleFonts.spaceMono(color: Colors.white, fontSize: 9, height: 1.3),
+                            textAlign: TextAlign.right,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(_cursorVisible ? '█' : ' ',
+                            style: GoogleFonts.spaceMono(color: const Color(0xFF39FF14), fontSize: 14)),
+                        ],
+                      ),
                     ],
                   ),
-                ],
-              ),
+                ),
+                Container(height: 2, color: Colors.white),
+              ],
             ),
-            Container(height: 2, color: Colors.white),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

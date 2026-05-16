@@ -11,6 +11,12 @@ import '../widgets/connection_banner.dart';
 class SpectrumScreen extends StatelessWidget {
   const SpectrumScreen({super.key});
 
+  Color _rssiColor(double rssi) {
+    if (rssi > -55) return const Color(0xFF39FF14);
+    if (rssi > -70) return Colors.white;
+    return const Color(0xFFFF0000);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<NetworkProvider>(
@@ -80,17 +86,29 @@ class SpectrumScreen extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        '${net.rssi.toStringAsFixed(0)} dBm',
-                        style: GoogleFonts.spaceMono(
-                          color: const Color(0xFF39FF14),
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            '${net.rssi.toStringAsFixed(0)}',
+                            style: GoogleFonts.spaceMono(
+                              color: _rssiColor(net.rssi),
+                              fontSize: 32,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'dBm',
+                            style: GoogleFonts.spaceMono(
+                              color: Colors.white38,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
                       ),
                       StatusBadge(
                         '[ ${net.signalQuality} ]',
-                        color: const Color(0xFF39FF14),
+                        color: _rssiColor(net.rssi),
                       ),
                     ],
                   ),
@@ -102,17 +120,17 @@ class SpectrumScreen extends StatelessWidget {
                       color: Colors.white38,
                     ),
                   ],
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   SizedBox(
-                    height: 80,
-                    child: _RssiWaterfallGraph(history: net.activeRssiHistory),
+                    height: 100,
+                    child: _RssiLineGraph(history: net.activeRssiHistory),
                   ),
                   const SizedBox(height: 4),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      MonoText('1 MINUTE AGO', fontSize: 8, color: Colors.white30),
-                      MonoText('REAL-TIME', fontSize: 8, color: Colors.white30),
+                      MonoText('60s AGO', fontSize: 8, color: Colors.white30),
+                      MonoText('NOW', fontSize: 8, color: Colors.white30),
                     ],
                   ),
                 ],
@@ -266,42 +284,105 @@ class _ChannelPainter extends CustomPainter {
   bool shouldRepaint(_ChannelPainter old) => true;
 }
 
-// ── RSSI Waterfall ────────────────────────────────────────────────────────────
-class _RssiWaterfallGraph extends StatelessWidget {
+// ── RSSI Line Graph ──────────────────────────────────────────────────────────
+class _RssiLineGraph extends StatelessWidget {
   final List<double> history;
-  const _RssiWaterfallGraph({required this.history});
+  const _RssiLineGraph({required this.history});
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (ctx, c) => CustomPaint(
-        size: Size(c.maxWidth, 80),
-        painter: _RssiPainter(history: history),
+        size: Size(c.maxWidth, 100),
+        painter: _RssiLinePainter(history: history),
       ),
     );
   }
 }
 
-class _RssiPainter extends CustomPainter {
+class _RssiLinePainter extends CustomPainter {
   final List<double> history;
-  _RssiPainter({required this.history});
+  _RssiLinePainter({required this.history});
 
   @override
   void paint(Canvas canvas, Size size) {
     if (history.isEmpty) return;
-    final barW = size.width / history.length;
-    for (int i = 0; i < history.length; i++) {
-      final rssi       = history[i].clamp(-90.0, -30.0);
-      final normalized = (rssi + 90) / 60;
-      final h          = normalized * size.height;
-      final isActive   = i >= history.length - 8;
-      canvas.drawRect(
-        Rect.fromLTWH(i * barW + 0.5, size.height - h, barW - 1, h),
-        Paint()..color = isActive ? const Color(0xFF39FF14) : Colors.white24,
+
+    final values = history.where((v) => v != -70 || history.indexOf(v) == 0).toList();
+    if (values.isEmpty) return;
+
+    // Reference lines at -30, -50, -70, -90 dBm
+    final refPaint = Paint()
+      ..color = Colors.white10
+      ..strokeWidth = 0.5;
+    final refs = [-30, -50, -70, -90];
+    for (final ref in refs) {
+      final normalized = (-ref - 30) / 60; // invert: -30→0, -90→1
+      final y = normalized * size.height;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), refPaint);
+    }
+
+    // Reference labels
+    for (final ref in refs) {
+      final normalized = (-ref - 30) / 60;
+      final y = normalized * size.height;
+      final tp = TextPainter(
+        text: TextSpan(
+          text: '$ref',
+          style: GoogleFonts.spaceMono(color: Colors.white30, fontSize: 8),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, Offset(2, y - tp.height / 2));
+    }
+
+    // Build path
+    final path = Path();
+    final barW = size.width / values.length;
+
+    for (int i = 0; i < values.length; i++) {
+      final rssi = values[i].clamp(-90.0, -30.0);
+      final normalized = (-rssi - 30) / 60; // -30→0, -90→1
+      final x = i * barW + barW / 2;
+      final y = normalized * size.height;
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+
+    // Draw fill
+    final lastX = (values.length - 1) * barW + barW / 2;
+    final fillPath = Path.from(path);
+    fillPath.lineTo(lastX, size.height);
+    fillPath.lineTo(barW / 2, size.height);
+    fillPath.close();
+
+    canvas.drawPath(fillPath, Paint()..color = const Color(0xFF39FF14).withOpacity(0.08));
+
+    // Draw line
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = const Color(0xFF39FF14)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5,
+    );
+
+    // Draw last point dot
+    if (values.isNotEmpty) {
+      final lastRssi = values.last.clamp(-90.0, -30.0);
+      final lastNorm = (-lastRssi - 30) / 60;
+      final lastPointY = lastNorm * size.height;
+      canvas.drawCircle(
+        Offset(lastX, lastPointY),
+        3,
+        Paint()..color = const Color(0xFF39FF14),
       );
     }
   }
 
   @override
-  bool shouldRepaint(_RssiPainter old) => true;
+  bool shouldRepaint(_RssiLinePainter old) => true;
 }

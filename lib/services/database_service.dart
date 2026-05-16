@@ -31,9 +31,44 @@ class DatabaseService {
 
     return openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createSchema,
+      onUpgrade: _onUpgrade,
     );
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await _createV2Tables(db);
+    }
+  }
+
+  Future<void> _createV2Tables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS trusted_networks (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        mac        TEXT    NOT NULL UNIQUE,
+        label      TEXT    NOT NULL,
+        created_at INTEGER NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      INSERT OR IGNORE INTO settings (key, value) VALUES ('deauth_threshold', '50')
+    ''');
+    await db.execute('''
+      INSERT OR IGNORE INTO settings (key, value) VALUES ('packet_threshold', '1024')
+    ''');
+    await db.execute('''
+      INSERT OR IGNORE INTO settings (key, value) VALUES ('audit_logging', 'true')
+    ''');
   }
 
   Future<void> _createSchema(Database db, int version) async {
@@ -94,6 +129,47 @@ class DatabaseService {
     await db.execute('CREATE INDEX idx_snap_wall ON snapshots(wall_ms)');
     await db.execute('CREATE INDEX idx_rssi_bssid ON rssi_history(bssid)');
     await db.execute('CREATE INDEX idx_inc_wall  ON incidents(wall_ms)');
+
+    // V2 tables (created for fresh installs too)
+    await _createV2Tables(db);
+  }
+
+  // ── Trusted Networks CRUD ──────────────────────────────────────────────
+  Future<List<Map<String, dynamic>>> getTrustedNetworks() async {
+    final d = await db;
+    return d.query('trusted_networks', orderBy: 'created_at ASC');
+  }
+
+  Future<void> addTrustedNetwork(String mac, String label) async {
+    final d = await db;
+    await d.insert('trusted_networks', {
+      'mac'       : mac.toUpperCase(),
+      'label'     : label,
+      'created_at': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
+
+  Future<void> removeTrustedNetwork(String mac) async {
+    final d = await db;
+    await d.delete('trusted_networks', where: 'mac = ?', whereArgs: [mac.toUpperCase()]);
+  }
+
+  // ── Settings CRUD ──────────────────────────────────────────────────────
+  Future<Map<String, String>> getSettings() async {
+    final d = await db;
+    final rows = await d.query('settings');
+    final map = <String, String>{};
+    for (final r in rows) {
+      map[r['key'] as String] = r['value'] as String;
+    }
+    return map;
+  }
+
+  Future<void> setSetting(String key, String value) async {
+    final d = await db;
+    await d.rawInsert('''
+      INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)
+    ''', [key, value]);
   }
 
   // ── Insert a full ESP32 snapshot ──────────────────────────────────────────
@@ -295,5 +371,10 @@ class DatabaseService {
     await d.delete('channel_history');
     await d.delete('snapshots');
     await d.delete('incidents');
+  }
+
+  Future<void> close() async {
+    await _db?.close();
+    _db = null;
   }
 }

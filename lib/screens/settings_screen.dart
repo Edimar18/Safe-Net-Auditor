@@ -14,14 +14,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final _macController = TextEditingController();
-
-  @override
-  void dispose() {
-    _macController.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Consumer<NetworkProvider>(
@@ -31,74 +23,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             const ConnectionBanner(),
 
-            // ── Trusted Networks ──────────────────────────────────────────
+            // ── Trusted Networks Summary ──────────────────────────────────
             RetroPanel(
-              title: 'TRUSTED NETWORKS',
-              child: Column(
-                children: [
-                  ...List.generate(net.trustedNetworks.length, (i) {
-                    final t = net.trustedNetworks[i];
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                      decoration: BoxDecoration(border: Border.all(color: Colors.white30, width: 1)),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                MonoText(t.label, fontSize: 10, fontWeight: FontWeight.bold),
-                                MonoText(t.mac, fontSize: 9, color: Colors.white54),
-                              ],
+              title: 'TRUSTED NETWORKS (${net.trustedNetworks.length})',
+              child: net.trustedNetworks.isEmpty
+                  ? MonoText('NO TRUSTED NETWORKS. ADD VIA AUDITOR TAB.', fontSize: 9, color: Colors.white38)
+                  : Column(
+                      children: net.trustedNetworks.map((t) => Container(
+                        margin: const EdgeInsets.only(bottom: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                        decoration: BoxDecoration(border: Border.all(color: Colors.white30, width: 1)),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.shield, color: Color(0xFF39FF14), size: 12),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  MonoText(t.label, fontSize: 10, fontWeight: FontWeight.bold),
+                                  MonoText(t.mac, fontSize: 9, color: Colors.white54),
+                                ],
+                              ),
                             ),
-                          ),
-                          RetroButton(
-                            label: '[ REMOVE ]',
-                            fontSize: 9,
-                            color: const Color(0xFFFF0000),
-                            onTap: () => net.removeTrustedNetwork(i),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Container(
-                          height: 36,
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          decoration: BoxDecoration(border: Border.all(color: Colors.white54, width: 1)),
-                          child: TextField(
-                            controller: _macController,
-                            style: GoogleFonts.spaceMono(color: Colors.white, fontSize: 11),
-                            decoration: InputDecoration(
-                              border: InputBorder.none,
-                              hintText: 'ENTER MAC ADDR',
-                              hintStyle: GoogleFonts.spaceMono(color: Colors.white30, fontSize: 10),
+                            RetroButton(
+                              label: '[ REMOVE ]',
+                              fontSize: 9,
+                              color: const Color(0xFFFF0000),
+                              onTap: () => net.removeTrustedNetwork(t.mac),
                             ),
-                            cursorColor: const Color(0xFF39FF14),
-                            cursorWidth: 8,
-                          ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      RetroButton(
-                        label: '[\nADD_NODE\n]',
-                        onTap: () {
-                          final mac = _macController.text.trim();
-                          if (mac.isNotEmpty) {
-                            net.addTrustedNetwork(mac, 'NODE_${net.trustedNetworks.length + 1}');
-                            _macController.clear();
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                      )).toList(),
+                    ),
             ),
 
             const SizedBox(height: 10),
@@ -173,6 +130,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   MonoText('SNAPSHOTS  : ${net.dbStats['snapshots']  ?? '--'}', fontSize: 9, color: Colors.white70),
                   MonoText('NETWORKS   : ${net.dbStats['networks']   ?? '--'}', fontSize: 9, color: Colors.white70),
                   MonoText('INCIDENTS  : ${net.dbStats['incidents']  ?? '--'}', fontSize: 9, color: Colors.white70),
+                  MonoText('TRUSTED    : ${net.trustedNetworks.length}', fontSize: 9, color: Colors.white70),
                 ],
               ),
             ),
