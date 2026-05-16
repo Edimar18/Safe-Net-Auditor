@@ -100,20 +100,44 @@ class DashboardScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
                         children: [
-                          MonoText(
-                            'RATE: ${net.packetsPerSec}/S',
-                            fontSize: 10,
+                          Text(
+                            '${net.packetsPerSec}',
+                            style: GoogleFonts.spaceMono(
+                              color: net.packetsPerSec > 0 ? Colors.white : Colors.white30,
+                              fontSize: 42,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                          MonoText(
-                            'PKT LIMIT: ${net.packetThreshold}/S',
-                            fontSize: 10,
-                            color: Colors.white54,
+                          const SizedBox(width: 6),
+                          Text(
+                            'PKT/S',
+                            style: GoogleFonts.spaceMono(
+                              color: Colors.white38,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const Spacer(),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              MonoText(
+                                net.isConnected ? 'LIVE' : 'NO DATA',
+                                fontSize: 9,
+                                color: net.isConnected ? const Color(0xFF39FF14) : Colors.white30,
+                              ),
+                              MonoText(
+                                'LIMIT: ${net.packetThreshold}/S',
+                                fontSize: 8,
+                                color: Colors.white30,
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 10),
                       _PacketBarGraph(history: net.activePacketHistory),
                     ],
                   ),
@@ -233,34 +257,42 @@ class _PacketBarGraph extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final maxVal = history.isEmpty ? 1.0 : history.fold(0.0, (a, b) => a > b ? a : b);
+    final values = history.isEmpty ? List.filled(40, 0.0) : history;
+    final maxVal = values.fold(0.0, (a, b) => a > b ? a : b);
     final hasData = maxVal > 0;
 
     return SizedBox(
       height: 70,
-      child: hasData
-          ? Row(
+      child: Column(
+        children: [
+          Expanded(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
-              children: history.map((v) {
-                final h = maxVal > 0 ? (v / maxVal) * 68 : 1.0;
+              children: values.map((v) {
+                final h = maxVal > 0 ? (v / maxVal) * 64 : 2.0;
                 return Expanded(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 0.5),
                     child: Container(
-                      height: h.clamp(2.0, 68.0),
+                      height: h.clamp(2.0, 64.0),
                       color: v > 0 ? Colors.white : Colors.white10,
                     ),
                   ),
                 );
               }).toList(),
-            )
-          : Center(
+            ),
+          ),
+          if (!hasData)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
               child: MonoText(
                 '>> WAITING FOR ESP32 DATA...',
-                fontSize: 10,
+                fontSize: 8,
                 color: Colors.white24,
               ),
             ),
+        ],
+      ),
     );
   }
 }
