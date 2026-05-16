@@ -241,12 +241,12 @@ class NetworkProvider extends ChangeNotifier {
     final rssiList   = await _dbSvc.getRssiHistory(bssid, limit: 60);
     final packetList = await _dbSvc.getPacketHistory(bssid, limit: 40);
 
-    selectedRssiHistory = List.filled(60, -70);
+    selectedRssiHistory = List.filled(60, -70, growable: true);
     for (int i = 0; i < rssiList.length && i < 60; i++) {
       selectedRssiHistory[60 - rssiList.length + i] = rssiList[i].toDouble();
     }
 
-    selectedPacketHistory = List.filled(40, 0);
+    selectedPacketHistory = List.filled(40, 0, growable: true);
     for (int i = 0; i < packetList.length && i < 40; i++) {
       selectedPacketHistory[40 - packetList.length + i] = packetList[i].toDouble();
     }
