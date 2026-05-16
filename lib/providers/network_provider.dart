@@ -83,11 +83,11 @@ class NetworkProvider extends ChangeNotifier {
   }
 
   void _initHistoryBuffers() {
-    packetHistory          = List.filled(40, 0);
-    deauthHistory          = List.filled(40, 0);
-    rssiHistory            = List.filled(60, -70);
-    selectedRssiHistory    = List.filled(60, -70);
-    selectedPacketHistory  = List.filled(40, 0);
+    packetHistory          = List.filled(40, 0, growable: true);
+    deauthHistory          = List.filled(40, 0, growable: true);
+    rssiHistory            = List.filled(60, -70, growable: true);
+    selectedRssiHistory    = List.filled(60, -70, growable: true);
+    selectedPacketHistory  = List.filled(40, 0, growable: true);
   }
 
   Future<void> init() async {
@@ -179,8 +179,8 @@ class NetworkProvider extends ChangeNotifier {
       final target = networks.where((n) => n.bssid == selectedBssid).firstOrNull;
       if (target != null) {
         rssi = target.rssi.toDouble();
-        if (selectedRssiHistory.isEmpty) selectedRssiHistory = List.filled(60, -70);
-        if (selectedPacketHistory.isEmpty) selectedPacketHistory = List.filled(40, 0);
+        if (selectedRssiHistory.isEmpty) selectedRssiHistory = List.filled(60, -70, growable: true);
+        if (selectedPacketHistory.isEmpty) selectedPacketHistory = List.filled(40, 0, growable: true);
         selectedRssiHistory.removeAt(0);
         selectedRssiHistory.add(rssi);
         selectedPacketHistory.removeAt(0);
@@ -190,14 +190,14 @@ class NetworkProvider extends ChangeNotifier {
       if (networks.isNotEmpty) {
         rssi = networks.reduce((a, b) => a.rssi > b.rssi ? a : b).rssi.toDouble();
       }
-      if (rssiHistory.isEmpty) rssiHistory = List.filled(60, -70);
+      if (rssiHistory.isEmpty) rssiHistory = List.filled(60, -70, growable: true);
       rssiHistory.removeAt(0);
       rssiHistory.add(rssi);
     }
 
     // Global rolling history
-    if (packetHistory.isEmpty) packetHistory = List.filled(40, 0);
-    if (deauthHistory.isEmpty) deauthHistory = List.filled(40, 0);
+    if (packetHistory.isEmpty) packetHistory = List.filled(40, 0, growable: true);
+    if (deauthHistory.isEmpty) deauthHistory = List.filled(40, 0, growable: true);
     packetHistory.removeAt(0);
     packetHistory.add(packetsPerSec.toDouble());
     deauthHistory.removeAt(0);
