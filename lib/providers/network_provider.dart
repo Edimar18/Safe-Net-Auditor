@@ -1,207 +1,285 @@
+// lib/providers/network_provider.dart
+//
+// Real-data provider.
+// • Reads JSON from ESP32 via SerialService
+// • Persists every snapshot to SQLite via DatabaseService
+// • Exposes selectedBssid for per-AP RSSI and packet graphs
+// ───────────────────────────────────────────────────────────────────────────────
+
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../models/network_model.dart';
+import '../services/serial_service.dart';
+import '../services/database_service.dart';
 
 enum ThreatLevel { clear, congestion, attack }
 
 class NetworkProvider extends ChangeNotifier {
-  final _rng = Random();
-  Timer? _timer;
 
-  // Live data
-  int packetsPerSec = 0;
-  int deauths = 0;
-  int trustScore = 88;
-  ThreatLevel threatLevel = ThreatLevel.clear;
-  List<int> channelCongestion = List.filled(13, 0);
-  List<NetworkInfo> networks = [];
-  double rssi = -42;
+  // ── Services ────────────────────────────────────────────────────────────
+  late final SerialService _serial;
+  final DatabaseService    _dbSvc = DatabaseService.instance;
 
-  // History buffers
+  // ── Connection state (exposed to UI) ────────────────────────────────────
+  SerialState get serialState => _serial.state;
+  String? get serialError     => _serial.errorMessage;
+  bool get isConnected        => _serial.state == SerialState.connected;
+
+  // ── Live fields (updated from ESP32) ────────────────────────────────────
+  int              packetsPerSec     = 0;
+  int              deauths           = 0;
+  int              trustScore        = 100;
+  ThreatLevel      threatLevel       = ThreatLevel.clear;
+  List<int>        channelCongestion = List.filled(13, 0);
+  List<NetworkInfo> networks         = [];
+  double           rssi              = -70;
+
+  // ── Rolling history buffers (global) ────────────────────────────────────
   final List<double> packetHistory = List.filled(40, 0);
   final List<double> deauthHistory = List.filled(40, 0);
-  final List<double> rssiHistory = List.filled(60, -65);
+  final List<double> rssiHistory   = List.filled(60, -70);
 
-  // Incident calendar (90 days)
-  late List<int> incidentCalendar;
+  // ── Per-AP history buffers (for selected BSSID) ──────────────────────────
+  List<double> selectedRssiHistory   = List.filled(60, -70);
+  List<double> selectedPacketHistory = List.filled(40, 0);
 
-  // Hourly trend (24h)
-  final List<double> hourlyTrend = List.generate(24, (i) {
-    // Morning quiet, peak at midday and evening
-    if (i < 6) return 10 + Random().nextDouble() * 10;
-    if (i < 9) return 40 + Random().nextDouble() * 20;
-    if (i < 14) return 60 + Random().nextDouble() * 30;
-    if (i < 18) return 50 + Random().nextDouble() * 20;
-    if (i < 21) return 70 + Random().nextDouble() * 20;
-    return 30 + Random().nextDouble() * 15;
-  });
+  // ── AP Selector ─────────────────────────────────────────────────────────
+  String? selectedBssid;
+  NetworkInfo? get selectedNetwork =>
+      selectedBssid == null
+          ? null
+          : networks.where((n) => n.bssid == selectedBssid).firstOrNull;
 
-  // Settings
-  int deauthThreshold = 50;
-  int packetThreshold = 1024;
-  bool auditLogging = true;
+  void selectAp(String? bssid) {
+    selectedBssid = bssid;
+    if (bssid != null) _loadDbHistoryFor(bssid);
+    notifyListeners();
+  }
+
+  // ── Historical / analytics (loaded from DB) ──────────────────────────────
+  List<int>    incidentCalendar = List.filled(90, 0);
+  List<double> hourlyTrend      = List.filled(24, 0);
+
+  // ── Settings ─────────────────────────────────────────────────────────────
+  int  deauthThreshold  = 50;
+  int  packetThreshold  = 1024;
+  bool auditLogging     = true;
   List<TrustedNetwork> trustedNetworks = [
     TrustedNetwork(mac: 'A1:B2:C3:D4:E5:F6', label: 'HOME_BASE_ROUTER'),
     TrustedNetwork(mac: 'A1:B2:C3:D4:E5:F7', label: 'CAFE_SECURE_NODE'),
     TrustedNetwork(mac: 'AA:BB:CC:DD:EE:FF', label: 'OFFICE_GUEST_WIFI'),
   ];
 
-  // Attack simulation toggle
-  bool _simulateAttack = false;
-  int _attackCooldown = 0;
+  // ── DB stats ─────────────────────────────────────────────────────────────
+  Map<String, int> dbStats = {};
 
+  int _snapshotCounter = 0;
+
+  // ═════════════════════════════════════════════════════════════════════════
   NetworkProvider() {
-    incidentCalendar = List.generate(90, (i) {
-      if (i % 7 == 0 || i % 7 == 6) return _rng.nextInt(3);
-      return _rng.nextInt(8);
-    });
-
-    networks = [
-      NetworkInfo(
-        ssid: 'Campus_WiFi',
-        bssid: '00:1A:2B:3C:4D:5E',
-        rssi: -45,
-        channel: 11,
-        ouiVendor: 'ESPRESSIF',
-      ),
-      NetworkInfo(
-        ssid: 'Campus_WiFi',
-        bssid: 'A1:B2:C3:D4:E5:F6',
-        rssi: -60,
-        channel: 6,
-        ouiVendor: 'TP-Link',
-      ),
-      NetworkInfo(
-        ssid: 'Library_Net',
-        bssid: 'DE:AD:BE:EF:CA:FE',
-        rssi: -72,
-        channel: 1,
-        ouiVendor: 'Cisco',
-      ),
-    ];
-
-    channelCongestion = [12, 5, 0, 0, 1, 45, 0, 0, 0, 0, 18, 2, 0];
+    _serial = SerialService(
+      onStateChanged: () => notifyListeners(),
+      onPayload: _onEsp32Payload,
+    );
   }
 
-  void startSimulation() {
-    _timer = Timer.periodic(const Duration(milliseconds: 800), (_) => _tick());
-  }
-
-  void triggerAttackSimulation() {
-    _simulateAttack = true;
-    _attackCooldown = 8;
+  Future<void> init() async {
+    incidentCalendar = await _dbSvc.getIncidentCalendar();
+    hourlyTrend      = await _dbSvc.getHourlyTrend();
+    dbStats          = await _dbSvc.getStats();
     notifyListeners();
+    _serial.init();
   }
 
-  void _tick() {
-    if (_attackCooldown > 0) {
-      _attackCooldown--;
-      if (_attackCooldown == 0) _simulateAttack = false;
+  // ═════════════════════════════════════════════════════════════════════════
+  // ESP32 PAYLOAD HANDLER
+  // ═════════════════════════════════════════════════════════════════════════
+  Future<void> _onEsp32Payload(Map<String, dynamic> json) async {
+    packetsPerSec       = (json['packets_per_sec'] as num?)?.toInt() ?? 0;
+    deauths             = (json['deauths']         as num?)?.toInt() ?? 0;
+    final int disassocs = (json['disassocs']        as num?)?.toInt() ?? 0;
+    final int probeReqs = (json['probe_reqs']       as num?)?.toInt() ?? 0;
+    final int esp32Ts   = (json['timestamp']        as num?)?.toInt() ?? 0;
+
+    // Channel congestion
+    final rawCh = json['channel_congestion'];
+    if (rawCh is List) {
+      channelCongestion = rawCh.take(13).map((v) => (v as num).toInt()).toList();
+      while (channelCongestion.length < 13) channelCongestion.add(0);
     }
 
-    // Randomly trigger attack occasionally
-    if (!_simulateAttack && _rng.nextInt(60) == 0) {
-      _simulateAttack = true;
-      _attackCooldown = 6;
+    // Networks
+    final rawNets = json['networks'];
+    if (rawNets is List) {
+      networks = rawNets
+          .map((n) => NetworkInfo.fromJson(n as Map<String, dynamic>))
+          .toList();
     }
 
-    if (_simulateAttack) {
-      packetsPerSec = 800 + _rng.nextInt(600);
-      deauths = 80 + _rng.nextInt(120);
-      trustScore = max(5, trustScore - _rng.nextInt(8));
-      threatLevel = ThreatLevel.attack;
-    } else {
-      packetsPerSec = 100 + _rng.nextInt(200);
-      deauths = _rng.nextInt(5);
-      trustScore = min(95, trustScore + _rng.nextInt(3));
-      if (trustScore > 70) {
-        threatLevel = ThreatLevel.clear;
-      } else if (trustScore > 40) {
-        threatLevel = ThreatLevel.congestion;
+    // Update selected-AP history
+    if (selectedBssid != null) {
+      final target = networks.where((n) => n.bssid == selectedBssid).firstOrNull;
+      if (target != null) {
+        rssi = target.rssi.toDouble();
+        selectedRssiHistory.removeAt(0);
+        selectedRssiHistory.add(rssi);
+        selectedPacketHistory.removeAt(0);
+        selectedPacketHistory.add(packetsPerSec.toDouble());
       }
+    } else {
+      if (networks.isNotEmpty) {
+        rssi = networks.reduce((a, b) => a.rssi > b.rssi ? a : b).rssi.toDouble();
+      }
+      rssiHistory.removeAt(0);
+      rssiHistory.add(rssi);
     }
 
-    // Update packet history
+    // Global rolling history
     packetHistory.removeAt(0);
     packetHistory.add(packetsPerSec.toDouble());
-
-    // Update deauth history
     deauthHistory.removeAt(0);
     deauthHistory.add(deauths.toDouble());
 
-    // Update RSSI
-    rssi = -42 + (_rng.nextDouble() - 0.5) * 6;
-    rssiHistory.removeAt(0);
-    rssiHistory.add(rssi);
+    _recalcTrustScore();
+    await _detectAndLogEvilTwins();
 
-    // Drift channel congestion
-    channelCongestion = channelCongestion.map((v) {
-      final delta = _rng.nextInt(5) - 2;
-      return max(0, min(99, v + delta));
-    }).toList();
+    // Persist to SQLite
+    if (auditLogging) {
+      await _dbSvc.insertSnapshot(
+        esp32Ts          : esp32Ts,
+        packetsPerSec    : packetsPerSec,
+        deauths          : deauths,
+        disassocs        : disassocs,
+        probeReqs        : probeReqs,
+        trustScore       : trustScore,
+        channelCongestion: channelCongestion,
+        networks: networks.map((n) => {
+          'ssid'      : n.ssid,
+          'bssid'     : n.bssid,
+          'rssi'      : n.rssi,
+          'channel'   : n.channel,
+          'oui_vendor': n.ouiVendor,
+        }).toList(),
+      );
+    }
 
+    notifyListeners();
+
+    // Refresh DB analytics every 30 snapshots
+    _snapshotCounter++;
+    if (_snapshotCounter % 30 == 0) {
+      incidentCalendar = await _dbSvc.getIncidentCalendar();
+      hourlyTrend      = await _dbSvc.getHourlyTrend();
+      dbStats          = await _dbSvc.getStats();
+    }
+  }
+
+  Future<void> _loadDbHistoryFor(String bssid) async {
+    final rssiList   = await _dbSvc.getRssiHistory(bssid, limit: 60);
+    final packetList = await _dbSvc.getPacketHistory(bssid, limit: 40);
+
+    selectedRssiHistory = List.filled(60, -70);
+    for (int i = 0; i < rssiList.length; i++) {
+      selectedRssiHistory[60 - rssiList.length + i] = rssiList[i].toDouble();
+    }
+
+    selectedPacketHistory = List.filled(40, 0);
+    for (int i = 0; i < packetList.length; i++) {
+      selectedPacketHistory[40 - packetList.length + i] = packetList[i].toDouble();
+    }
     notifyListeners();
   }
 
-  String get signalQuality {
-    if (rssi > -50) return 'EXCELLENT';
-    if (rssi > -60) return 'GOOD';
-    if (rssi > -70) return 'FAIR';
-    if (rssi > -80) return 'POOR';
-    return 'DEAD ZONE';
+  void _recalcTrustScore() {
+    int score = 100;
+    if (deauths > deauthThreshold)       score -= 40;
+    else if (deauths > 10)               score -= 20;
+    if (packetsPerSec > packetThreshold) score -= 20;
+    if (evilTwinSuspects.isNotEmpty)     score -= 30;
+    trustScore = score.clamp(0, 100);
+
+    if (trustScore < 40 || deauths > deauthThreshold) {
+      threatLevel = ThreatLevel.attack;
+    } else if (trustScore < 70) {
+      threatLevel = ThreatLevel.congestion;
+    } else {
+      threatLevel = ThreatLevel.clear;
+    }
   }
 
+  Future<void> _detectAndLogEvilTwins() async {
+    final Map<String, List<NetworkInfo>> bySsid = {};
+    for (final n in networks) bySsid.putIfAbsent(n.ssid, () => []).add(n);
+    for (final entry in bySsid.entries) {
+      if (entry.value.length > 1) {
+        await _dbSvc.logEvilTwin(
+          entry.key, entry.value[0].bssid, entry.value[1].bssid);
+      }
+    }
+  }
+
+  // ── Getters ────────────────────────────────────────────────────────────────
   String get threatText {
     switch (threatLevel) {
-      case ThreatLevel.clear:
-        return 'ALL CLEAR';
-      case ThreatLevel.congestion:
-        return 'HIGH CONGESTION';
-      case ThreatLevel.attack:
-        return 'UNDER ATTACK';
+      case ThreatLevel.clear:      return 'ALL CLEAR';
+      case ThreatLevel.congestion: return 'HIGH CONGESTION';
+      case ThreatLevel.attack:     return 'UNDER ATTACK';
     }
+  }
+
+  String get signalQuality {
+    final v = rssi;
+    if (v > -50) return 'EXCELLENT';
+    if (v > -60) return 'GOOD';
+    if (v > -70) return 'FAIR';
+    if (v > -80) return 'POOR';
+    return 'DEAD ZONE';
   }
 
   List<NetworkInfo> get evilTwinSuspects {
     final Map<String, List<NetworkInfo>> grouped = {};
-    for (final n in networks) {
-      grouped.putIfAbsent(n.ssid, () => []).add(n);
-    }
+    for (final n in networks) grouped.putIfAbsent(n.ssid, () => []).add(n);
     return grouped.entries
         .where((e) => e.value.length > 1)
         .expand((e) => e.value)
         .toList();
   }
 
+  List<double> get activeRssiHistory =>
+      selectedBssid != null ? selectedRssiHistory : rssiHistory;
+
+  List<double> get activePacketHistory =>
+      selectedBssid != null ? selectedPacketHistory : packetHistory;
+
+  // ── Serial control ────────────────────────────────────────────────────────
+  Future<void> connectSerial()    => _serial.connect();
+  Future<void> disconnectSerial() => _serial.disconnect();
+
+  // ── Settings ─────────────────────────────────────────────────────────────
+  void setDeauthThreshold(int v) { deauthThreshold  = v; notifyListeners(); }
+  void setPacketThreshold(int v) { packetThreshold   = v; notifyListeners(); }
+  void toggleAuditLogging()      { auditLogging = !auditLogging; notifyListeners(); }
+
   void addTrustedNetwork(String mac, String label) {
     trustedNetworks.add(TrustedNetwork(mac: mac, label: label));
     notifyListeners();
   }
-
-  void removeTrustedNetwork(int index) {
-    trustedNetworks.removeAt(index);
+  void removeTrustedNetwork(int i) {
+    trustedNetworks.removeAt(i);
     notifyListeners();
   }
 
-  void setDeauthThreshold(int val) {
-    deauthThreshold = val;
-    notifyListeners();
-  }
-
-  void setPacketThreshold(int val) {
-    packetThreshold = val;
-    notifyListeners();
-  }
-
-  void toggleAuditLogging() {
-    auditLogging = !auditLogging;
+  Future<void> clearDatabase() async {
+    await _dbSvc.clearAll();
+    incidentCalendar = List.filled(90, 0);
+    hourlyTrend      = List.filled(24, 0);
+    dbStats          = {};
     notifyListeners();
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _serial.dispose();
     super.dispose();
   }
 }

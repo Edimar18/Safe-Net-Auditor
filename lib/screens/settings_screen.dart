@@ -1,8 +1,10 @@
+// lib/screens/settings_screen.dart
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../providers/network_provider.dart';
 import '../widgets/retro_widgets.dart';
+import '../widgets/connection_banner.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -27,7 +29,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return RetroScreen(
           title: 'SETTINGS',
           children: [
-            // ─── Trusted Networks ─────────────────────────────────────────
+            const ConnectionBanner(),
+
+            // ── Trusted Networks ──────────────────────────────────────────
             RetroPanel(
               title: 'TRUSTED NETWORKS',
               child: Column(
@@ -37,9 +41,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     return Container(
                       margin: const EdgeInsets.only(bottom: 8),
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.white30, width: 1),
-                      ),
+                      decoration: BoxDecoration(border: Border.all(color: Colors.white30, width: 1)),
                       child: Row(
                         children: [
                           Expanded(
@@ -61,29 +63,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     );
                   }),
-
                   const SizedBox(height: 8),
-
-                  // Add node row
                   Row(
                     children: [
                       Expanded(
                         child: Container(
                           height: 36,
                           padding: const EdgeInsets.symmetric(horizontal: 8),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.white54, width: 1),
-                          ),
+                          decoration: BoxDecoration(border: Border.all(color: Colors.white54, width: 1)),
                           child: TextField(
                             controller: _macController,
                             style: GoogleFonts.spaceMono(color: Colors.white, fontSize: 11),
                             decoration: InputDecoration(
                               border: InputBorder.none,
                               hintText: 'ENTER MAC ADDR',
-                              hintStyle: GoogleFonts.spaceMono(
-                                color: Colors.white30,
-                                fontSize: 10,
-                              ),
+                              hintStyle: GoogleFonts.spaceMono(color: Colors.white30, fontSize: 10),
                             ),
                             cursorColor: const Color(0xFF39FF14),
                             cursorWidth: 8,
@@ -109,40 +103,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             const SizedBox(height: 10),
 
-            // ─── Alert Thresholds ─────────────────────────────────────────
+            // ── Alert Thresholds ──────────────────────────────────────────
             RetroPanel(
               title: 'ALERT THRESHOLDS',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Deauth threshold
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      MonoText('VIBRATION_INTENSITY', fontSize: 9),
+                      MonoText('DEAUTH ALERT THRESHOLD', fontSize: 9),
                       MonoText(
-                        net.deauthThreshold > 70
-                            ? '[ HIGH ]'
-                            : net.deauthThreshold > 30
-                                ? '[ MEDIUM ]'
-                                : '[ LOW ]',
+                        net.deauthThreshold > 70 ? '[ HIGH ]' : net.deauthThreshold > 30 ? '[ MEDIUM ]' : '[ LOW ]',
                         fontSize: 9,
-                        color: net.deauthThreshold > 70
-                            ? const Color(0xFFFF0000)
-                            : Colors.white,
+                        color: net.deauthThreshold > 70 ? const Color(0xFFFF0000) : Colors.white,
                       ),
                     ],
                   ),
                   RetroSlider(
                     value: net.deauthThreshold.toDouble(),
-                    min: 10,
-                    max: 200,
+                    min: 10, max: 200,
                     onChanged: (v) => net.setDeauthThreshold(v.round()),
                   ),
+                  MonoText('ALERT IF DEAUTHS > ${net.deauthThreshold} / SEC', fontSize: 8, color: Colors.white38),
 
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
 
-                  // Packet threshold
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -152,57 +138,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   RetroSlider(
                     value: net.packetThreshold.toDouble(),
-                    min: 100,
-                    max: 2000,
+                    min: 100, max: 2000,
                     onChanged: (v) => net.setPacketThreshold(v.round()),
                   ),
 
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
 
-                  // Audit logging toggle
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      MonoText('AUDIT_LOGGING', fontSize: 10),
+                      MonoText('AUDIT_LOGGING → SQLITE', fontSize: 10),
                       Row(
                         children: [
-                          GestureDetector(
-                            onTap: net.auditLogging ? null : net.toggleAuditLogging,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: net.auditLogging ? Colors.white : Colors.black,
-                                border: Border.all(color: Colors.white, width: 1),
-                              ),
-                              child: Text(
-                                '[ ON ]',
-                                style: GoogleFonts.spaceMono(
-                                  color: net.auditLogging ? Colors.black : Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
+                          _ToggleBtn(label: '[ ON ]',  active: net.auditLogging,  onTap: () { if (!net.auditLogging) net.toggleAuditLogging(); }),
                           const SizedBox(width: 6),
-                          GestureDetector(
-                            onTap: net.auditLogging ? net.toggleAuditLogging : null,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: !net.auditLogging ? Colors.white : Colors.black,
-                                border: Border.all(color: Colors.white, width: 1),
-                              ),
-                              child: Text(
-                                '[ OFF ]',
-                                style: GoogleFonts.spaceMono(
-                                  color: !net.auditLogging ? Colors.black : Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
+                          _ToggleBtn(label: '[ OFF ]', active: !net.auditLogging, onTap: () { if (net.auditLogging) net.toggleAuditLogging(); }),
                         ],
                       ),
                     ],
@@ -213,7 +163,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             const SizedBox(height: 10),
 
-            // ─── Danger Zone ──────────────────────────────────────────────
+            // ── DB Info ───────────────────────────────────────────────────
+            RetroPanel(
+              title: 'DATABASE INFO',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  MonoText('FILE: safenet_auditor.db', fontSize: 9),
+                  MonoText('SNAPSHOTS  : ${net.dbStats['snapshots']  ?? '--'}', fontSize: 9, color: Colors.white70),
+                  MonoText('NETWORKS   : ${net.dbStats['networks']   ?? '--'}', fontSize: 9, color: Colors.white70),
+                  MonoText('INCIDENTS  : ${net.dbStats['incidents']  ?? '--'}', fontSize: 9, color: Colors.white70),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 10),
+
+            // ── Danger Zone ───────────────────────────────────────────────
             RetroPanel(
               title: 'DANGER_ZONE',
               borderColor: const Color(0xFFFF0000),
@@ -222,11 +188,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   Container(
                     padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: const Color(0xFFFF0000), width: 1),
-                    ),
+                    decoration: BoxDecoration(border: Border.all(color: const Color(0xFFFF0000), width: 1)),
                     child: MonoText(
-                      'WARNING: CLEARING CACHE WILL\nREMOVE ALL INTERCEPTED PACKET\nHISTORY.',
+                      'WARNING: CLEARING CACHE WILL\nREMOVE ALL INTERCEPTED PACKET\nHISTORY FROM SQLITE DATABASE.',
                       fontSize: 10,
                       color: const Color(0xFFFF0000),
                     ),
@@ -235,7 +199,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   RetroButton(
                     label: '[ CLEAR ALL LOGS ]',
                     color: const Color(0xFFFF0000),
-                    onTap: () => _showClearDialog(context),
+                    onTap: () => _showClearDialog(context, net),
                   ),
                 ],
               ),
@@ -243,7 +207,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             const SizedBox(height: 10),
 
-            // ─── App info ─────────────────────────────────────────────────
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(border: Border.all(color: Colors.white12, width: 1)),
@@ -251,7 +214,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 'SAFE-NET AUDITOR v1.0.0\n'
                 'BUILD: 2025.06.ESP32\n'
                 'PROTOCOL: 802.11 MGMT FRAMES\n'
-                'BAND: 2.4GHz / PROMISCUOUS',
+                'BAND: 2.4GHz / PROMISCUOUS\n'
+                'DB: SQLite via sqflite',
                 fontSize: 8,
                 color: Colors.white24,
               ),
@@ -262,7 +226,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _showClearDialog(BuildContext context) {
+  void _showClearDialog(BuildContext context, NetworkProvider net) {
     showDialog(
       context: context,
       builder: (_) => Dialog(
@@ -270,33 +234,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
         child: Container(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            border: Border.all(color: const Color(0xFFFF0000), width: 2),
-          ),
+          decoration: BoxDecoration(border: Border.all(color: const Color(0xFFFF0000), width: 2)),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               MonoText('[ !! WARNING !! ]', fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFFFF0000)),
               const SizedBox(height: 12),
-              MonoText('THIS WILL ERASE ALL\nLOGGED PACKET HISTORY.\nPROCEED?', fontSize: 10, color: Colors.white70, textAlign: TextAlign.center),
+              MonoText('THIS WILL ERASE ALL\nSQLITE PACKET HISTORY.\nPROCEED?', fontSize: 10, color: Colors.white70, textAlign: TextAlign.center),
               const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  RetroButton(
-                    label: '[ CANCEL ]',
-                    onTap: () => Navigator.of(context).pop(),
-                  ),
+                  RetroButton(label: '[ CANCEL ]', onTap: () => Navigator.of(context).pop()),
                   RetroButton(
                     label: '[ CONFIRM ]',
                     color: const Color(0xFFFF0000),
-                    onTap: () => Navigator.of(context).pop(),
+                    onTap: () async {
+                      Navigator.of(context).pop();
+                      await net.clearDatabase();
+                    },
                   ),
                 ],
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ToggleBtn extends StatelessWidget {
+  final String label;
+  final bool   active;
+  final VoidCallback onTap;
+  const _ToggleBtn({required this.label, required this.active, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: active ? Colors.white : Colors.black,
+          border: Border.all(color: Colors.white, width: 1),
+        ),
+        child: Text(label, style: GoogleFonts.spaceMono(color: active ? Colors.black : Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
       ),
     );
   }

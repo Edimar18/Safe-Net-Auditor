@@ -1,9 +1,12 @@
+// lib/screens/dashboard_screen.dart
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../providers/network_provider.dart';
 import '../widgets/retro_widgets.dart';
 import '../widgets/trust_gauge.dart';
+import '../widgets/ap_selector.dart';
+import '../widgets/connection_banner.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -12,7 +15,7 @@ class DashboardScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<NetworkProvider>(
       builder: (context, net, _) {
-        final isAttack = net.threatLevel == ThreatLevel.attack;
+        final isAttack    = net.threatLevel == ThreatLevel.attack;
         final isCongestion = net.threatLevel == ThreatLevel.congestion;
 
         return Container(
@@ -22,7 +25,10 @@ class DashboardScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // ─── Threat Banner ─────────────────────────────────────────
+                // ── Connection status ─────────────────────────────────────
+                const ConnectionBanner(),
+
+                // ── Threat Banner ─────────────────────────────────────────
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
                   padding: const EdgeInsets.symmetric(vertical: 14),
@@ -55,7 +61,7 @@ class DashboardScreen extends StatelessWidget {
 
                 const SizedBox(height: 10),
 
-                // ─── Trust Score ───────────────────────────────────────────
+                // ── Trust Score ───────────────────────────────────────────
                 RetroPanel(
                   title: 'TRUST SCORE',
                   child: TrustScoreGauge(score: net.trustScore),
@@ -63,28 +69,59 @@ class DashboardScreen extends StatelessWidget {
 
                 const SizedBox(height: 10),
 
-                // ─── Packet Count ──────────────────────────────────────────
+                // ── AP Selector ───────────────────────────────────────────
                 RetroPanel(
-                  title: 'PACKET COUNT',
+                  title: 'MONITOR TARGET AP',
+                  padding: const EdgeInsets.all(8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          MonoText('RATE: ${(net.packetsPerSec / 1000).toStringAsFixed(1)}K/S', fontSize: 10),
-                          MonoText('PEAK: 1.5K/S', fontSize: 10, color: Colors.white54),
-                        ],
+                      MonoText(
+                        net.selectedBssid == null
+                            ? '>> SHOWING: GLOBAL PACKET RATE'
+                            : '>> SHOWING: PACKETS FOR ${net.selectedNetwork?.ssid ?? net.selectedBssid}',
+                        fontSize: 9,
+                        color: Colors.white54,
                       ),
-                      const SizedBox(height: 8),
-                      _PacketBarGraph(history: net.packetHistory),
+                      const SizedBox(height: 6),
+                      const ApSelector(compact: true),
                     ],
                   ),
                 ),
 
                 const SizedBox(height: 10),
 
-                // ─── Quick Stats ───────────────────────────────────────────
+                // ── Packet Count ──────────────────────────────────────────
+                RetroPanel(
+                  title: net.selectedBssid == null
+                      ? 'PACKET COUNT — ALL NETWORKS'
+                      : 'PACKET COUNT — ${(net.selectedNetwork?.ssid ?? net.selectedBssid)!.toUpperCase()}',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          MonoText(
+                            'RATE: ${net.packetsPerSec}/S',
+                            fontSize: 10,
+                          ),
+                          MonoText(
+                            'PKT LIMIT: ${net.packetThreshold}/S',
+                            fontSize: 10,
+                            color: Colors.white54,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      _PacketBarGraph(history: net.activePacketHistory),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 10),
+
+                // ── Quick Stats ───────────────────────────────────────────
                 Row(
                   children: [
                     Expanded(
@@ -103,10 +140,10 @@ class DashboardScreen extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: RetroPanel(
-                        title: 'NETWORKS',
+                        title: 'APS',
                         child: MonoText(
                           '${net.networks.length}',
                           fontSize: 28,
@@ -114,13 +151,13 @@ class DashboardScreen extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: RetroPanel(
                         title: 'RSSI',
                         borderColor: const Color(0xFF39FF14),
                         child: MonoText(
-                          '${net.rssi.toStringAsFixed(0)}',
+                          net.rssi.toStringAsFixed(0),
                           fontSize: 28,
                           fontWeight: FontWeight.bold,
                           color: const Color(0xFF39FF14),
@@ -132,7 +169,23 @@ class DashboardScreen extends StatelessWidget {
 
                 const SizedBox(height: 10),
 
-                // ─── ASCII Decoration ──────────────────────────────────────
+                // ── DB Stats ──────────────────────────────────────────────
+                if (net.dbStats.isNotEmpty)
+                  RetroPanel(
+                    title: 'DATABASE',
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _StatCell('SNAPSHOTS', '${net.dbStats['snapshots'] ?? 0}'),
+                        _StatCell('APS SEEN', '${net.dbStats['networks'] ?? 0}'),
+                        _StatCell('INCIDENTS', '${net.dbStats['incidents'] ?? 0}'),
+                      ],
+                    ),
+                  ),
+
+                const SizedBox(height: 10),
+
+                // ── ASCII Decoration ──────────────────────────────────────
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
@@ -158,13 +211,29 @@ class DashboardScreen extends StatelessWidget {
   }
 }
 
+class _StatCell extends StatelessWidget {
+  final String label;
+  final String value;
+  const _StatCell(this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        MonoText(value, fontSize: 18, fontWeight: FontWeight.bold),
+        MonoText(label, fontSize: 7, color: Colors.white38),
+      ],
+    );
+  }
+}
+
 class _PacketBarGraph extends StatelessWidget {
   final List<double> history;
   const _PacketBarGraph({required this.history});
 
   @override
   Widget build(BuildContext context) {
-    final max = history.reduce((a, b) => a > b ? a : b).clamp(1.0, double.infinity);
+    final max = history.fold(1.0, (a, b) => a > b ? a : b);
     return SizedBox(
       height: 70,
       child: Row(

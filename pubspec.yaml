@@ -38,6 +38,9 @@ dependencies:
   fl_chart: ^0.68.0
   provider: ^6.1.1
   shared_preferences: ^2.2.2
+  usb_serial: ^0.5.1       # USB-OTG Serial to ESP32
+  sqflite: ^2.3.2          # SQLite database
+  path: ^1.9.0
 
 
 dev_dependencies:

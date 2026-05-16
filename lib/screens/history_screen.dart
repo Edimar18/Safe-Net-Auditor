@@ -1,9 +1,11 @@
+// lib/screens/history_screen.dart
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../providers/network_provider.dart';
 import '../widgets/retro_widgets.dart';
+import '../widgets/connection_banner.dart';
 
 class HistoryScreen extends StatelessWidget {
   const HistoryScreen({super.key});
@@ -12,14 +14,16 @@ class HistoryScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<NetworkProvider>(
       builder: (context, net, _) {
-        final criticalCount = net.incidentCalendar.where((v) => v >= 6).length;
+        final criticalCount = net.incidentCalendar.where((v) => v >= 3).length;
 
         return RetroScreen(
           title: 'HISTORY',
           children: [
-            // ─── Incident Heatmap Calendar ────────────────────────────────
+            const ConnectionBanner(),
+
+            // ── Incident Heatmap Calendar ─────────────────────────────────
             RetroPanel(
-              title: 'INCIDENT HISTORY',
+              title: 'INCIDENT HISTORY (DB)',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -45,7 +49,7 @@ class HistoryScreen extends StatelessWidget {
                       ...List.generate(5, (i) => Container(
                         width: 12, height: 12,
                         margin: const EdgeInsets.symmetric(horizontal: 2),
-                        color: Colors.white.withOpacity(0.1 + i * 0.2),
+                        color: Colors.white.withOpacity(0.1 + i * 0.18),
                       )),
                       const SizedBox(width: 4),
                       MonoText('MORE', fontSize: 8, color: Colors.white30),
@@ -57,9 +61,9 @@ class HistoryScreen extends StatelessWidget {
 
             const SizedBox(height: 10),
 
-            // ─── Hourly Traffic Trends ────────────────────────────────────
+            // ── Hourly Traffic Trends ─────────────────────────────────────
             RetroPanel(
-              title: 'HOURLY TRENDS',
+              title: 'HOURLY TRENDS (DB AVG)',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -67,7 +71,11 @@ class HistoryScreen extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       MonoText('NETWORK LOAD / 24H', fontSize: 9, color: Colors.white54),
-                      MonoText('PEAK: 14:00', fontSize: 9, color: Colors.white),
+                      MonoText(
+                        _peakHour(net.hourlyTrend),
+                        fontSize: 9,
+                        color: Colors.white,
+                      ),
                     ],
                   ),
                   const SizedBox(height: 10),
@@ -88,35 +96,45 @@ class HistoryScreen extends StatelessWidget {
 
             const SizedBox(height: 10),
 
-            // ─── Export Tools ─────────────────────────────────────────────
+            // ── DB Summary ────────────────────────────────────────────────
+            RetroPanel(
+              title: 'SQLITE DATABASE',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _DbStatCell('SNAPSHOTS', '${net.dbStats['snapshots'] ?? 0}'),
+                      _DbStatCell('APS SEEN', '${net.dbStats['networks'] ?? 0}'),
+                      _DbStatCell('INCIDENTS', '${net.dbStats['incidents'] ?? 0}'),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  MonoText(
+                    '>> DATABASE: safenet_auditor.db\n'
+                    '>> LOCATION: /data/data/<pkg>/databases/\n'
+                    '>> AUTO-DUMP SCHEDULED FOR 23:59:00.',
+                    fontSize: 8,
+                    color: Colors.white30,
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 10),
+
+            // ── Export Tools ──────────────────────────────────────────────
             RetroPanel(
               title: 'EXPORT TOOLS',
               child: Column(
                 children: [
                   Row(
                     children: [
-                      Expanded(
-                        child: _ExportButton(
-                          icon: Icons.table_chart_outlined,
-                          label: '[ DATA.CSV ]',
-                          onTap: () => _showExportDialog(context, 'CSV'),
-                        ),
-                      ),
+                      Expanded(child: _ExportButton(icon: Icons.table_chart_outlined, label: '[ DATA.CSV ]', onTap: () => _showExportDialog(context, 'CSV'))),
                       const SizedBox(width: 12),
-                      Expanded(
-                        child: _ExportButton(
-                          icon: Icons.picture_as_pdf_outlined,
-                          label: '[ REPORT.PDF ]',
-                          onTap: () => _showExportDialog(context, 'PDF'),
-                        ),
-                      ),
+                      Expanded(child: _ExportButton(icon: Icons.picture_as_pdf_outlined, label: '[ REPORT.PDF ]', onTap: () => _showExportDialog(context, 'PDF'))),
                     ],
-                  ),
-                  const SizedBox(height: 8),
-                  MonoText(
-                    '>> AUTO-DUMP SCHEDULED FOR 23:59:00.\n>> DESTINATION: /mnt/logs/archive/',
-                    fontSize: 8,
-                    color: Colors.white38,
                   ),
                 ],
               ),
@@ -125,6 +143,16 @@ class HistoryScreen extends StatelessWidget {
         );
       },
     );
+  }
+
+  String _peakHour(List<double> trend) {
+    if (trend.every((v) => v == 0)) return 'PEAK: --:--';
+    double max = 0;
+    int idx = 0;
+    for (int i = 0; i < trend.length; i++) {
+      if (trend[i] > max) { max = trend[i]; idx = i; }
+    }
+    return 'PEAK: ${idx.toString().padLeft(2, '0')}:00';
   }
 
   void _showExportDialog(BuildContext context, String format) {
@@ -141,13 +169,29 @@ class HistoryScreen extends StatelessWidget {
             children: [
               MonoText('[ EXPORT $format ]', fontSize: 13, fontWeight: FontWeight.bold),
               const SizedBox(height: 12),
-              MonoText('GENERATING AUDIT REPORT...\nSIMULATED — CONNECT ESP32\nTO EXPORT REAL DATA.', fontSize: 10, color: Colors.white70, textAlign: TextAlign.center),
+              MonoText('CONNECT ESP32 TO EXPORT\nREAL CAPTURED DATA TO $format.', fontSize: 10, color: Colors.white70, textAlign: TextAlign.center),
               const SizedBox(height: 16),
               RetroButton(label: '[ OK ]', onTap: () => Navigator.of(context).pop()),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _DbStatCell extends StatelessWidget {
+  final String label;
+  final String value;
+  const _DbStatCell(this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        MonoText(value, fontSize: 22, fontWeight: FontWeight.bold),
+        MonoText(label, fontSize: 7, color: Colors.white38),
+      ],
     );
   }
 }
@@ -182,14 +226,7 @@ class _ExportButtonState extends State<_ExportButton> {
           children: [
             Icon(widget.icon, color: _pressed ? Colors.black : Colors.white, size: 22),
             const SizedBox(height: 6),
-            Text(
-              widget.label,
-              style: GoogleFonts.spaceMono(
-                color: _pressed ? Colors.black : Colors.white,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            Text(widget.label, style: GoogleFonts.spaceMono(color: _pressed ? Colors.black : Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
           ],
         ),
       ),
@@ -197,7 +234,6 @@ class _ExportButtonState extends State<_ExportButton> {
   }
 }
 
-// ─── Heatmap Calendar ─────────────────────────────────────────────────────────
 class _HeatmapCalendar extends StatelessWidget {
   final List<int> data;
   const _HeatmapCalendar({required this.data});
@@ -213,25 +249,14 @@ class _HeatmapCalendar extends StatelessWidget {
             children: List.generate(7, (d) {
               final idx = w * 7 + d;
               if (idx >= data.length) return const SizedBox(height: 10);
-              final intensity = data[idx];
+              final v = data[idx];
               Color c;
-              if (intensity == 0) {
-                c = Colors.white10;
-              } else if (intensity <= 2) {
-                c = Colors.white24;
-              } else if (intensity <= 4) {
-                c = Colors.white54;
-              } else if (intensity <= 6) {
-                c = Colors.white;
-              } else {
-                c = const Color(0xFFFF0000);
-              }
-              return Container(
-                margin: const EdgeInsets.all(1),
-                width: double.infinity,
-                height: 8,
-                color: c,
-              );
+              if (v == 0)       c = Colors.white10;
+              else if (v == 1)  c = Colors.white24;
+              else if (v == 2)  c = Colors.white54;
+              else if (v <= 4)  c = Colors.white;
+              else              c = const Color(0xFFFF0000);
+              return Container(margin: const EdgeInsets.all(1), width: double.infinity, height: 8, color: c);
             }),
           ),
         );
@@ -240,7 +265,6 @@ class _HeatmapCalendar extends StatelessWidget {
   }
 }
 
-// ─── Hourly line graph ────────────────────────────────────────────────────────
 class _HourlyLineGraph extends StatelessWidget {
   final List<double> data;
   const _HourlyLineGraph({required this.data});
@@ -248,12 +272,10 @@ class _HourlyLineGraph extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
-      builder: (ctx, constraints) {
-        return CustomPaint(
-          size: Size(constraints.maxWidth, 100),
-          painter: _LinePainter(data: data),
-        );
-      },
+      builder: (ctx, c) => CustomPaint(
+        size: Size(c.maxWidth, 100),
+        painter: _LinePainter(data: data),
+      ),
     );
   }
 }
@@ -264,42 +286,23 @@ class _LinePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (data.isEmpty) return;
+    if (data.isEmpty || data.every((v) => v == 0)) return;
     final maxV = data.reduce(max).clamp(1.0, double.infinity);
-
     final path = Path();
-    final fillPath = Path();
-
+    final fill = Path();
     for (int i = 0; i < data.length; i++) {
       final x = i / (data.length - 1) * size.width;
       final y = size.height - (data[i] / maxV) * size.height * 0.9 - 4;
-      if (i == 0) {
-        path.moveTo(x, y);
-        fillPath.moveTo(x, size.height);
-        fillPath.lineTo(x, y);
-      } else {
-        path.lineTo(x, y);
-        fillPath.lineTo(x, y);
-      }
+      if (i == 0) { path.moveTo(x, y); fill.moveTo(x, size.height); fill.lineTo(x, y); }
+      else { path.lineTo(x, y); fill.lineTo(x, y); }
     }
-
-    fillPath.lineTo(size.width, size.height);
-    fillPath.close();
-
-    canvas.drawPath(fillPath, Paint()..color = Colors.white10);
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
-    );
-
-    // Draw grid
+    fill.lineTo(size.width, size.height);
+    fill.close();
+    canvas.drawPath(fill, Paint()..color = Colors.white10);
+    canvas.drawPath(path, Paint()..color = Colors.white..style = PaintingStyle.stroke..strokeWidth = 2);
     final gridPaint = Paint()..color = Colors.white12..strokeWidth = 0.5;
     for (int i = 1; i < 4; i++) {
-      final y = size.height * i / 4;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+      canvas.drawLine(Offset(0, size.height * i / 4), Offset(size.width, size.height * i / 4), gridPaint);
     }
   }
 

@@ -19,7 +19,7 @@ void main() {
   ));
   runApp(
     ChangeNotifierProvider(
-      create: (_) => NetworkProvider()..startSimulation(),
+      create: (_) => NetworkProvider()..init(),
       child: const SafeNetApp(),
     ),
   );
@@ -58,7 +58,6 @@ class SafeNetApp extends StatelessWidget {
 
 class MainScaffold extends StatefulWidget {
   const MainScaffold({super.key});
-
   @override
   State<MainScaffold> createState() => _MainScaffoldState();
 }
@@ -76,10 +75,10 @@ class _MainScaffoldState extends State<MainScaffold> {
 
   final List<_NavItem> _navItems = const [
     _NavItem(icon: Icons.grid_view_rounded, label: 'DASHBOARD'),
-    _NavItem(icon: Icons.security, label: 'AUDITOR'),
-    _NavItem(icon: Icons.bar_chart, label: 'SPECTRUM'),
-    _NavItem(icon: Icons.history, label: 'HISTORY'),
-    _NavItem(icon: Icons.settings, label: 'SETTINGS'),
+    _NavItem(icon: Icons.security,           label: 'AUDITOR'),
+    _NavItem(icon: Icons.bar_chart,          label: 'SPECTRUM'),
+    _NavItem(icon: Icons.history,            label: 'HISTORY'),
+    _NavItem(icon: Icons.settings,           label: 'SETTINGS'),
   ];
 
   @override
@@ -103,44 +102,36 @@ class _MainScaffoldState extends State<MainScaffold> {
 
 class _NavItem {
   final IconData icon;
-  final String label;
+  final String   label;
   const _NavItem({required this.icon, required this.label});
 }
 
 class _AppHeader extends StatefulWidget {
   const _AppHeader();
-
   @override
   State<_AppHeader> createState() => _AppHeaderState();
 }
 
-class _AppHeaderState extends State<_AppHeader>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _blinkController;
+class _AppHeaderState extends State<_AppHeader> with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
   bool _cursorVisible = true;
 
   @override
   void initState() {
     super.initState();
-    _blinkController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    )..addStatusListener((status) {
-        if (status == AnimationStatus.completed ||
-            status == AnimationStatus.dismissed) {
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 600))
+      ..addStatusListener((s) {
+        if (s == AnimationStatus.completed || s == AnimationStatus.dismissed) {
           setState(() => _cursorVisible = !_cursorVisible);
-          _blinkController.reset();
-          _blinkController.forward();
+          _ctrl.reset();
+          _ctrl.forward();
         }
       });
-    _blinkController.forward();
+    _ctrl.forward();
   }
 
   @override
-  void dispose() {
-    _blinkController.dispose();
-    super.dispose();
-  }
+  void dispose() { _ctrl.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
@@ -160,32 +151,20 @@ class _AppHeaderState extends State<_AppHeader>
                     child: Text(
                       '[ SAFE-NET AUDITOR | IT3R2]',
                       style: GoogleFonts.spaceMono(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1,
+                        color: Colors.white, fontSize: 13,
+                        fontWeight: FontWeight.bold, letterSpacing: 1,
                       ),
                     ),
                   ),
                   Row(
                     children: [
-                      Text(
-                        'STATUS:\nSNIFFING',
-                        style: GoogleFonts.spaceMono(
-                          color: Colors.white,
-                          fontSize: 9,
-                          height: 1.3,
-                        ),
+                      Text('STATUS:\nSNIFFING',
+                        style: GoogleFonts.spaceMono(color: Colors.white, fontSize: 9, height: 1.3),
                         textAlign: TextAlign.right,
                       ),
                       const SizedBox(width: 4),
-                      Text(
-                        _cursorVisible ? '█' : ' ',
-                        style: GoogleFonts.spaceMono(
-                          color: const Color(0xFF39FF14),
-                          fontSize: 14,
-                        ),
-                      ),
+                      Text(_cursorVisible ? '█' : ' ',
+                        style: GoogleFonts.spaceMono(color: const Color(0xFF39FF14), fontSize: 14)),
                     ],
                   ),
                 ],
@@ -203,12 +182,7 @@ class _RetroNavBar extends StatelessWidget {
   final int currentIndex;
   final List<_NavItem> items;
   final ValueChanged<int> onTap;
-
-  const _RetroNavBar({
-    required this.currentIndex,
-    required this.items,
-    required this.onTap,
-  });
+  const _RetroNavBar({required this.currentIndex, required this.items, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -232,28 +206,19 @@ class _RetroNavBar extends StatelessWidget {
                     margin: const EdgeInsets.all(3),
                     decoration: BoxDecoration(
                       color: active ? Colors.white : Colors.black,
-                      border: Border.all(
-                        color: active ? Colors.white : Colors.white54,
-                        width: 1,
-                      ),
+                      border: Border.all(color: active ? Colors.white : Colors.white54, width: 1),
                     ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          items[i].icon,
-                          size: 16,
-                          color: active ? Colors.black : Colors.white,
-                        ),
+                        Icon(items[i].icon, size: 16, color: active ? Colors.black : Colors.white),
                         const SizedBox(height: 2),
-                        Text(
-                          items[i].label,
+                        Text(items[i].label,
                           style: GoogleFonts.spaceMono(
                             fontSize: 6.5,
                             color: active ? Colors.black : Colors.white,
                             fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                          )),
                       ],
                     ),
                   ),
