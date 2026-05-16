@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'providers/network_provider.dart';
-import 'services/serial_service.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/auditor_screen.dart';
 import 'screens/spectrum_screen.dart';
@@ -38,15 +37,13 @@ class SafeNetApp extends StatelessWidget {
         brightness: Brightness.dark,
         scaffoldBackgroundColor: const Color(0xFF000000),
         colorScheme: const ColorScheme.dark(
-          background: Color(0xFF000000),
           surface: Color(0xFF0A0A0A),
           primary: Color(0xFFFFFFFF),
           secondary: Color(0xFF39FF14),
           error: Color(0xFFFF0000),
         ),
-        textTheme: GoogleFonts.spaceMonoTextTheme(
-          ThemeData.dark().textTheme,
-        ).apply(
+        // FIXED TEXT THEME
+        textTheme: GoogleFonts.spaceMonoTextTheme(ThemeData.dark().textTheme).apply(
           bodyColor: Colors.white,
           displayColor: Colors.white,
         ),
@@ -89,7 +86,18 @@ class _MainScaffoldState extends State<MainScaffold> {
       body: Column(
         children: [
           const _AppHeader(),
-          Expanded(child: _screens[_currentIndex]),
+          Expanded(
+            // KEY FIX: IndexedStack keeps ALL 5 screens mounted at all times.
+            // Only the active tab is painted, but every Consumer<NetworkProvider>
+            // in every tab stays wired to the provider. When notifyListeners()
+            // fires (every ESP32 payload), ALL tabs rebuild simultaneously.
+            // Old: Expanded(child: _screens[_currentIndex])
+            // That destroyed inactive tabs, killing their Consumers.
+            child: IndexedStack(
+              index: _currentIndex,
+              children: _screens,
+            ),
+          ),
         ],
       ),
       bottomNavigationBar: _RetroNavBar(
@@ -136,18 +144,28 @@ class _AppHeaderState extends State<_AppHeader> with SingleTickerProviderStateMi
 
   @override
   Widget build(BuildContext context) {
+    // Consumer keeps the header live on every ESP32 payload —
+    // packet rate, connection state, threat level all update in real time.
     return Consumer<NetworkProvider>(
-      builder: (ctx, net, _) {
-        String statusLine;
-        if (net.isConnected) {
-          statusLine = 'STATUS:\nSNIFFING';
-        } else if (net.serialState == SerialState.connecting) {
-          statusLine = 'STATUS:\nCONNECTING';
-        } else if (net.serialState == SerialState.error) {
-          statusLine = 'STATUS:\nERROR';
+      builder: (context, net, _) {
+        final connected = net.isConnected;
+        final isAttack  = net.threatLevel == ThreatLevel.attack;
+
+        final String statusLine;
+        final Color  statusColor;
+        if (connected) {
+          statusLine  = 'STATUS:\nSNIFFING';
+          statusColor = Colors.white;
+        } else if (net.serialState.name == 'connecting') {
+          statusLine  = 'STATUS:\nCONNECT…';
+          statusColor = Colors.white54;
         } else {
-          statusLine = 'STATUS:\nDISCONNECTED';
+          statusLine  = 'STATUS:\nOFFLINE ';
+          statusColor = const Color(0xFFFF0000);
         }
+
+        final Color borderColor = isAttack ? const Color(0xFFFF0000) : Colors.white;
+        final Color cursorColor = connected ? const Color(0xFF39FF14) : const Color(0xFFFF0000);
 
         return Container(
           color: Colors.black,
@@ -159,32 +177,47 @@ class _AppHeaderState extends State<_AppHeader> with SingleTickerProviderStateMi
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   child: Row(
                     children: [
-                      const Icon(Icons.wifi_tethering, color: Colors.white, size: 20),
+                      Icon(
+                        connected ? Icons.wifi_tethering : Icons.wifi_off,
+                        color: connected ? Colors.white : const Color(0xFFFF0000),
+                        size: 20,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          '[ SAFE-NET AUDITOR | IT3R2]',
+                          '[ SAFE-NET AUDITOR v1.0 ]',
                           style: GoogleFonts.spaceMono(
                             color: Colors.white, fontSize: 13,
                             fontWeight: FontWeight.bold, letterSpacing: 1,
                           ),
                         ),
                       ),
+                      if (connected)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: Text(
+                            '${net.packetsPerSec}pkt/s',
+                            style: GoogleFonts.spaceMono(
+                              color: Colors.white38, fontSize: 8),
+                          ),
+                        ),
                       Row(
                         children: [
                           Text(statusLine,
-                            style: GoogleFonts.spaceMono(color: Colors.white, fontSize: 9, height: 1.3),
+                            style: GoogleFonts.spaceMono(
+                              color: statusColor, fontSize: 9, height: 1.3),
                             textAlign: TextAlign.right,
                           ),
                           const SizedBox(width: 4),
                           Text(_cursorVisible ? '█' : ' ',
-                            style: GoogleFonts.spaceMono(color: const Color(0xFF39FF14), fontSize: 14)),
+                            style: GoogleFonts.spaceMono(
+                              color: cursorColor, fontSize: 14)),
                         ],
                       ),
                     ],
                   ),
                 ),
-                Container(height: 2, color: Colors.white),
+                Container(height: 2, color: borderColor),
               ],
             ),
           ),
