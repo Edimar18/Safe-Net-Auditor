@@ -1,0 +1,2 @@
+# safe_net_auditor
+Safe-Net Auditor is a localized, offline network health and security visualization tool. It uses an ESP32 microcontroller operating in Promiscuous Mode to passively sniff 802.11 management frames on the 2.4GHz spectrum. The ESP32 transmits this raw network data via a direct wired Serial connection (USB-C) to a mobile/desktop application built with Flutter.
