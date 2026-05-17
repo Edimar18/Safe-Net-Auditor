@@ -183,12 +183,18 @@ class NetworkProvider extends ChangeNotifier {
         if (existing == null || info.rssi > existing.rssi) {
           deduped[info.bssid] = info;
         } else {
-          // Merge deauth flag
-          existing.deauthTargeted = existing.deauthTargeted || info.deauthTargeted;
+          // Override deauth flag from current snapshot
+          existing.deauthTargeted = info.deauthTargeted;
         }
       }
       networks = deduped.values.toList();
-      networks.sort((a, b) => b.rssi.compareTo(a.rssi));
+      networks.sort((a, b) {
+        // Deauth-targeted APs first
+        if (a.deauthTargeted && !b.deauthTargeted) return -1;
+        if (!a.deauthTargeted && b.deauthTargeted) return 1;
+        // Then by RSSI
+        return b.rssi.compareTo(a.rssi);
+      });
     }
 
     // Update selected-AP history

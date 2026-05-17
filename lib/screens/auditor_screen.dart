@@ -114,6 +114,11 @@ class _AuditorScreenState extends State<AuditorScreen> {
                               ),
                             ),
                           _FingerprintRow(
+                            'SSID:', n.ssid.isEmpty ? '<HIDDEN>' : "'${n.ssid}'",
+                            color: flashing ? Colors.black : Colors.white,
+                            bold: true,
+                          ),
+                          _FingerprintRow(
                             'TARGET MAC:', n.bssid,
                             color: flashing ? Colors.black : null,
                           ),
@@ -361,7 +366,8 @@ class _FingerprintRow extends StatelessWidget {
   final String label;
   final String value;
   final Color? color;
-  const _FingerprintRow(this.label, this.value, {this.color});
+  final bool bold;
+  const _FingerprintRow(this.label, this.value, {this.color, this.bold = false});
 
   @override
   Widget build(BuildContext context) {
@@ -373,7 +379,7 @@ class _FingerprintRow extends StatelessWidget {
             width: 130,
             child: MonoText(label, fontSize: 10, color: color ?? Colors.white54),
           ),
-          Expanded(child: MonoText(value, fontSize: 10, color: color ?? Colors.white)),
+          Expanded(child: MonoText(value, fontSize: 10, color: color ?? Colors.white, fontWeight: bold ? FontWeight.bold : FontWeight.normal)),
         ],
       ),
     );

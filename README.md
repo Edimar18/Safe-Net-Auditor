@@ -9,11 +9,11 @@ Sniff management frames with an ESP32 — visualize threats, deauth attacks, evi
 
 <!-- Replace these placeholders with actual screenshots -->
 <p align="center">
-  <img src="assets/screenshots/dashboard.png" width="200" alt="Dashboard" />
-  <img src="assets/screenshots/auditor.png" width="200" alt="Auditor" />
-  <img src="assets/screenshots/spectrum.png" width="200" alt="Spectrum" />
-  <img src="assets/screenshots/history.png" width="200" alt="History" />
-  <img src="assets/screenshots/settings.png" width="200" alt="Settings" />
+  <img src="dashboard.png" width="200" alt="Dashboard" />
+  <img src="auditor.png" width="200" alt="Auditor" />
+  <img src="spectrum.png" width="200" alt="Spectrum" />
+  <img src="history.png" width="200" alt="History" />
+  <img src="settings.png" width="200" alt="Settings" />
 </p>
 
 > **To add screenshots:** Place PNG files in `assets/screenshots/` with these names:
