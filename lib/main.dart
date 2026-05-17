@@ -185,7 +185,7 @@ class _AppHeaderState extends State<_AppHeader> with SingleTickerProviderStateMi
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          '[ SAFE-NET AUDITOR v1.0 ]',
+                          'SAFE-NET AUDITOR | ED1MA5',
                           style: GoogleFonts.spaceMono(
                             color: Colors.white, fontSize: 13,
                             fontWeight: FontWeight.bold, letterSpacing: 1,
