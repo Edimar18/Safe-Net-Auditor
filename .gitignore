@@ -48,4 +48,4 @@ PROJECT_CONTEXT.md
 ESP32-CODE.ino
 
 .commandcode/*
-.commandcode/taste
+.commandcode/taste/*
