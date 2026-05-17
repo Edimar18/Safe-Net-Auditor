@@ -373,6 +373,77 @@ class DatabaseService {
     await d.delete('incidents');
   }
 
+  // ── Bulk export queries ──────────────────────────────────────────────────
+  Future<List<Map<String, dynamic>>> getAllSnapshots({int? limit}) async {
+    final d = await db;
+    return d.query('snapshots',
+      orderBy: 'wall_ms DESC',
+      limit: limit,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getAllNetworks() async {
+    final d = await db;
+    return d.query('networks', orderBy: 'last_seen DESC');
+  }
+
+  Future<List<Map<String, dynamic>>> getAllIncidents({int? limit}) async {
+    final d = await db;
+    return d.query('incidents',
+      orderBy: 'wall_ms DESC',
+      limit: limit,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getAllRssiHistory({int? limit}) async {
+    final d = await db;
+    return d.rawQuery('''
+      SELECT r.id, r.snapshot_id, r.bssid, r.rssi, r.channel, s.wall_ms
+      FROM rssi_history r
+      JOIN snapshots s ON s.id = r.snapshot_id
+      ORDER BY s.wall_ms DESC
+      ${limit != null ? 'LIMIT $limit' : ''}
+    ''');
+  }
+
+  Future<List<Map<String, dynamic>>> getAllChannelHistory({int? limit}) async {
+    final d = await db;
+    return d.rawQuery('''
+      SELECT c.id, c.snapshot_id, c.channel, c.pkt_count, s.wall_ms
+      FROM channel_history c
+      JOIN snapshots s ON s.id = c.snapshot_id
+      ORDER BY s.wall_ms DESC
+      ${limit != null ? 'LIMIT $limit' : ''}
+    ''');
+  }
+
+  Future<List<Map<String, dynamic>>> getTopDeauthSnapshots(int limit) async {
+    final d = await db;
+    return d.query('snapshots',
+      where: 'deauths > 0',
+      orderBy: 'deauths DESC',
+      limit: limit,
+    );
+  }
+
+  Future<int> getTotalPackets() async {
+    final d = await db;
+    final r = await d.rawQuery('SELECT SUM(packets_per_sec) as total FROM snapshots');
+    return (r.first['total'] as int?) ?? 0;
+  }
+
+  Future<double> getAvgTrustScore() async {
+    final d = await db;
+    final r = await d.rawQuery('SELECT AVG(trust_score) as avg FROM snapshots');
+    return (r.first['avg'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  Future<int> getTotalDeauths() async {
+    final d = await db;
+    final r = await d.rawQuery('SELECT SUM(deauths) as total FROM snapshots');
+    return (r.first['total'] as int?) ?? 0;
+  }
+
   Future<void> close() async {
     await _db?.close();
     _db = null;

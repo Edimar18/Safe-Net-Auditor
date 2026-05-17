@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../providers/network_provider.dart';
 import '../widgets/retro_widgets.dart';
 import '../widgets/connection_banner.dart';
+import '../services/export_service.dart';
 
 class HistoryScreen extends StatelessWidget {
   const HistoryScreen({super.key});
@@ -158,24 +159,8 @@ class HistoryScreen extends StatelessWidget {
   void _showExportDialog(BuildContext context, String format) {
     showDialog(
       context: context,
-      builder: (_) => Dialog(
-        backgroundColor: Colors.black,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(border: Border.all(color: Colors.white, width: 2)),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              MonoText('[ EXPORT $format ]', fontSize: 13, fontWeight: FontWeight.bold),
-              const SizedBox(height: 12),
-              MonoText('CONNECT ESP32 TO EXPORT\nREAL CAPTURED DATA TO $format.', fontSize: 10, color: Colors.white70, textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              RetroButton(label: '[ OK ]', onTap: () => Navigator.of(context).pop()),
-            ],
-          ),
-        ),
-      ),
+      barrierDismissible: false,
+      builder: (_) => _ExportDialog(format: format),
     );
   }
 }
@@ -308,4 +293,74 @@ class _LinePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_LinePainter old) => true;
+}
+
+class _ExportDialog extends StatefulWidget {
+  final String format;
+  const _ExportDialog({required this.format});
+
+  @override
+  State<_ExportDialog> createState() => _ExportDialogState();
+}
+
+class _ExportDialogState extends State<_ExportDialog> {
+  bool _loading = true;
+  String _message = 'Generating...';
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _doExport();
+  }
+
+  Future<void> _doExport() async {
+    try {
+      if (widget.format == 'CSV') {
+        final file = await ExportService.generateCsv();
+        setState(() => _message = 'Sharing CSV...');
+        await ExportService.shareFile(file);
+      } else {
+        final file = await ExportService.generatePdf();
+        setState(() => _message = 'Sharing PDF...');
+        await ExportService.shareFile(file);
+      }
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) setState(() { _loading = false; _error = e.toString(); });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.black,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(border: Border.all(color: Colors.white, width: 2)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            MonoText('[ EXPORT ${widget.format} ]', fontSize: 13, fontWeight: FontWeight.bold),
+            const SizedBox(height: 12),
+            if (_loading) ...[
+              const SizedBox(
+                width: 32, height: 32,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+              ),
+              const SizedBox(height: 10),
+              MonoText(_message, fontSize: 10, color: Colors.white70, textAlign: TextAlign.center),
+            ] else ...[
+              MonoText('EXPORT FAILED', fontSize: 10, color: const Color(0xFFFF0000), fontWeight: FontWeight.bold),
+              const SizedBox(height: 4),
+              MonoText(_error ?? 'Unknown error', fontSize: 8, color: Colors.white54, textAlign: TextAlign.center),
+              const SizedBox(height: 10),
+              RetroButton(label: '[ OK ]', onTap: () => Navigator.of(context).pop()),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }

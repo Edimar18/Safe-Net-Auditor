@@ -41,6 +41,10 @@ dependencies:
   usb_serial: ^0.5.1       # USB-OTG Serial to ESP32
   sqflite: ^2.3.2          # SQLite database
   path: ^1.9.0
+  csv: ^6.0.0              # CSV export
+  pdf: ^3.11.0             # PDF generation
+  printing: ^5.13.0        # PDF preview/share
+  path_provider: ^2.1.0    # Temp directory access
 
 
 dev_dependencies:
