@@ -1,22 +1,50 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../providers/network_provider.dart';
+import '../models/network_model.dart';
 import '../widgets/retro_widgets.dart';
 
-class AuditorScreen extends StatelessWidget {
+class AuditorScreen extends StatefulWidget {
   const AuditorScreen({super.key});
+
+  @override
+  State<AuditorScreen> createState() => _AuditorScreenState();
+}
+
+class _AuditorScreenState extends State<AuditorScreen> {
+  Timer? _flashTimer;
+  int _flashTick = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _flashTimer = Timer.periodic(const Duration(milliseconds: 400), (_) {
+      if (mounted) setState(() => _flashTick++);
+    });
+  }
+
+  @override
+  void dispose() {
+    _flashTimer?.cancel();
+    super.dispose();
+  }
+
+  bool _isFlashingRed(String bssid) {
+    return _flashTick % 2 == 0;
+  }
 
   @override
   Widget build(BuildContext context) {
     return Consumer<NetworkProvider>(
       builder: (context, net, _) {
-        final twins = net.evilTwinSuspects;
+        final targeted = net.deauthTargetedNetworks;
 
         return RetroScreen(
           title: 'AUDITOR',
           children: [
-            // ─── Deauth Spike Graph ──────────────────────────────────────
+            // ─── 1. Deauth Spike Graph ───────────────────────────────────
             RetroPanel(
               title: 'DEAUTH SPIKES',
               child: Column(
@@ -33,6 +61,8 @@ class AuditorScreen extends StatelessWidget {
                       MonoText('T-60s', fontSize: 8, color: Colors.white38),
                       if (net.deauths > 20)
                         MonoText('▲ ALERT TRIGGERED', fontSize: 8, color: const Color(0xFFFF0000)),
+                      if (targeted.isNotEmpty)
+                        MonoText('TARGET: ${targeted.length} AP(s)', fontSize: 8, color: const Color(0xFFFF4444)),
                       MonoText('NOW', fontSize: 8, color: Colors.white38),
                     ],
                   ),
@@ -42,53 +72,127 @@ class AuditorScreen extends StatelessWidget {
 
             const SizedBox(height: 10),
 
-            // ─── Evil Twin Scanner ────────────────────────────────────────
+            // ─── 2. BSSID Fingerprint (with deauth flash) ──────────────────
             RetroPanel(
-              title: 'EVIL TWIN SCAN',
+              title: 'BSSID FINGERPRINT',
               child: Column(
                 children: net.networks.map((n) {
-                  final isTwin = twins.contains(n);
-                  final isEspressif = n.ouiVendor.toUpperCase().contains('ESPRESSIF');
-                  final flagged = isTwin && isEspressif;
+                  final isTargeted = n.deauthTargeted;
+                  final isRisky = n.ouiVendor.toUpperCase().contains('ESPRESSIF');
+                  final trusted = net.isTrusted(n.bssid);
+                  final flashing = isTargeted && _isFlashingRed(n.bssid);
 
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: flagged ? const Color(0xFF1A0000) : Colors.black,
-                      border: Border.all(
-                        color: flagged ? const Color(0xFFFF0000) : Colors.white30,
-                        width: flagged ? 1.5 : 1,
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: flashing ? const Color(0xFFFF0000) : Colors.black,
+                        border: Border.all(
+                          color: isTargeted ? const Color(0xFFFF0000) : Colors.white24,
+                          width: isTargeted ? 2 : 1,
+                        ),
                       ),
-                    ),
-                    child: Row(
-                      children: [
-                        if (flagged)
-                          const Padding(
-                            padding: EdgeInsets.only(right: 6),
-                            child: Icon(Icons.warning_amber_rounded, color: Color(0xFFFF0000), size: 14),
-                          ),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              MonoText(
-                                "SSID: '${n.ssid}'",
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: flagged ? const Color(0xFFFF4444) : Colors.white,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (isTargeted)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.gpp_maybe, color: Color(0xFFFF0000), size: 14),
+                                  const SizedBox(width: 4),
+                                  MonoText(
+                                    'DEAUTH TARGET — UNDER ATTACK',
+                                    fontSize: 9,
+                                    color: flashing ? Colors.black : const Color(0xFFFF0000),
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ],
                               ),
-                              MonoText(n.bssid, fontSize: 9, color: Colors.white54),
+                            ),
+                          _FingerprintRow(
+                            'TARGET MAC:', n.bssid,
+                            color: flashing ? Colors.black : null,
+                          ),
+                          _FingerprintRow(
+                            'CHANNEL:', '${n.channel} (2.4GHz)',
+                            color: flashing ? Colors.black : null,
+                          ),
+                          _FingerprintRow(
+                            'SIGNAL (RSSI):', '${n.rssi} dBm',
+                            color: flashing ? Colors.black : null,
+                          ),
+                          _FingerprintRow(
+                            'FRAMES/S:', '${n.perApFrames}',
+                            color: flashing ? Colors.black : null,
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              MonoText('VENDOR OUI:', fontSize: 10, color: flashing ? Colors.black : Colors.white54),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                color: isRisky ? const Color(0xFFFF0000) : Colors.white,
+                                child: Text(
+                                  isRisky
+                                      ? '${n.ouiVendor.toUpperCase()} ! (HI-RISK)'
+                                      : n.ouiVendor.toUpperCase(),
+                                  style: GoogleFonts.spaceMono(
+                                    color: Colors.black,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              const Spacer(),
+                              GestureDetector(
+                                onTap: () {
+                                  if (trusted) {
+                                    net.removeTrustedNetwork(n.bssid);
+                                  } else {
+                                    net.addTrustedNetwork(n.bssid, n.ssid.isEmpty ? n.bssid : n.ssid);
+                                  }
+                                },
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 120),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: trusted ? const Color(0xFF39FF14) : Colors.black,
+                                    border: Border.all(
+                                      color: trusted ? const Color(0xFF39FF14) : Colors.white54,
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        trusted ? Icons.shield : Icons.shield_outlined,
+                                        color: trusted ? Colors.black : Colors.white54,
+                                        size: 12,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        trusted ? '[ TRUSTED ]' : '[ TRUST ]',
+                                        style: GoogleFonts.spaceMono(
+                                          color: trusted ? Colors.black : Colors.white54,
+                                          fontSize: 8,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
-                        ),
-                        StatusBadge(
-                          flagged
-                              ? '[ RED ALERT: PHISHING\n${n.ssid} RISK ]'
-                              : '[ SECURE ]',
-                          color: flagged ? const Color(0xFFFF0000) : const Color(0xFF39FF14),
-                        ),
-                      ],
+                          if (n != net.networks.last) const RetroDivider(),
+                        ],
+                      ),
                     ),
                   );
                 }).toList(),
@@ -97,84 +201,153 @@ class AuditorScreen extends StatelessWidget {
 
             const SizedBox(height: 10),
 
-            // ─── BSSID Fingerprint ────────────────────────────────────────
+            // ─── 3. Evil Twin Scanner ───────────────────────────────────────
             RetroPanel(
-              title: 'BSSID FINGERPRINT',
+              title: 'EVIL TWIN SCAN',
               child: Column(
-                children: net.networks.map((n) {
-                  final isRisky = n.ouiVendor.toUpperCase().contains('ESPRESSIF');
-                  final trusted = net.isTrusted(n.bssid);
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _FingerprintRow('TARGET MAC:', n.bssid),
-                        _FingerprintRow('CHANNEL:', '${n.channel} (2.4GHz)'),
-                        _FingerprintRow('SIGNAL (RSSI):', '${n.rssi} dBm'),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Group networks by SSID, show pairs with same SSID
+                  ...(() {
+                    final Map<String, List<NetworkInfo>> bySsid = {};
+                    for (final n in net.networks) {
+                      if (n.ssid.isEmpty || n.ssid == '<Hidden>') continue;
+                      bySsid.putIfAbsent(n.ssid, () => []).add(n);
+                    }
+
+                    final paired = bySsid.entries.where((e) => e.value.length > 1).toList();
+
+                    if (paired.isEmpty) {
+                      return [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Center(
+                            child: MonoText(
+                              'NO EVIL TWIN DETECTED',
+                              fontSize: 10,
+                              color: const Color(0xFF39FF14),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
                         const SizedBox(height: 4),
-                        Row(
+                        MonoText(
+                          '>> ALL SSIDs ARE UNIQUE\n>> NO DUPLICATE BSSIDs FOUND',
+                          fontSize: 8,
+                          color: Colors.white30,
+                        ),
+                      ];
+                    }
+
+                    return paired.map((entry) {
+                      final ssid = entry.key;
+                      final aps = entry.value;
+                      final hasEspressif = aps.any((n) => n.ouiVendor.toUpperCase().contains('ESPRESSIF'));
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: hasEspressif ? const Color(0xFF1A0000) : const Color(0xFF0A0A00),
+                          border: Border.all(
+                            color: hasEspressif ? const Color(0xFFFF0000) : const Color(0xFFFFFF00),
+                            width: hasEspressif ? 2 : 1.5,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            MonoText('VENDOR OUI:', fontSize: 10, color: Colors.white54),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              color: isRisky ? const Color(0xFFFF0000) : Colors.white,
-                              child: Text(
-                                isRisky
-                                    ? '${n.ouiVendor.toUpperCase()} ! (HI-RISK)'
-                                    : n.ouiVendor.toUpperCase(),
-                                style: GoogleFonts.spaceMono(
-                                  color: Colors.black,
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.bold,
+                            // SSID header
+                            Row(
+                              children: [
+                                Icon(
+                                  hasEspressif ? Icons.warning_amber_rounded : Icons.copy,
+                                  color: hasEspressif ? const Color(0xFFFF0000) : const Color(0xFFFFFF00),
+                                  size: 14,
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: MonoText(
+                                    "SSID: '$ssid'",
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: hasEspressif ? const Color(0xFFFF4444) : const Color(0xFFFFFF00),
+                                  ),
+                                ),
+                                StatusBadge(
+                                  hasEspressif
+                                      ? '[ EVIL TWIN ]\nPHISHING RISK'
+                                      : '[ DUPLICATE ]\nTWIN FOUND',
+                                  color: hasEspressif ? const Color(0xFFFF0000) : const Color(0xFFFFFF00),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            MonoText(
+                              '${aps.length} BSSIDs share this SSID:',
+                              fontSize: 8,
+                              color: Colors.white38,
+                            ),
+                            const SizedBox(height: 4),
+                            // List each BSSID in the pair
+                            ...aps.map((ap) => Container(
+                              margin: const EdgeInsets.only(bottom: 4, left: 12),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.black,
+                                border: Border.all(
+                                  color: ap.deauthTargeted ? const Color(0xFFFF0000) : Colors.white12,
+                                  width: ap.deauthTargeted ? 1.5 : 1,
                                 ),
                               ),
-                            ),
-                            const Spacer(),
-                            GestureDetector(
-                              onTap: () {
-                                if (trusted) {
-                                  net.removeTrustedNetwork(n.bssid);
-                                } else {
-                                  net.addTrustedNetwork(n.bssid, n.ssid.isEmpty ? n.bssid : n.ssid);
-                                }
-                              },
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 120),
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: trusted ? const Color(0xFF39FF14) : Colors.black,
-                                  border: Border.all(color: trusted ? const Color(0xFF39FF14) : Colors.white54, width: 1),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      trusted ? Icons.shield : Icons.shield_outlined,
-                                      color: trusted ? Colors.black : Colors.white54,
-                                      size: 12,
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        MonoText('BSSID: ${ap.bssid}', fontSize: 9, color: Colors.white),
+                                        Row(
+                                          children: [
+                                            MonoText('CH:${ap.channel}', fontSize: 8, color: Colors.white38),
+                                            const SizedBox(width: 8),
+                                            MonoText('${ap.rssi} dBm', fontSize: 8, color: Colors.white38),
+                                            const SizedBox(width: 8),
+                                            MonoText(ap.ouiVendor, fontSize: 8, color: ap.ouiVendor.toUpperCase().contains('ESPRESSIF')
+                                                ? const Color(0xFFFF4444) : Colors.white38),
+                                          ],
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      trusted ? '[ TRUSTED ]' : '[ TRUST ]',
-                                      style: GoogleFonts.spaceMono(
-                                        color: trusted ? Colors.black : Colors.white54,
-                                        fontSize: 8,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                  ),
+                                  if (ap.deauthTargeted)
+                                    const Icon(Icons.gpp_maybe, color: Color(0xFFFF0000), size: 16),
+                                ],
                               ),
-                            ),
+                            )),
+                            // RSSI difference warning
+                            if (aps.length >= 2) ...[
+                              const SizedBox(height: 4),
+                              MonoText(
+                                'Δ RSSI: ${(aps[0].rssi - aps[1].rssi).abs()} dBm',
+                                fontSize: 8,
+                                color: (aps[0].rssi - aps[1].rssi).abs() < 5
+                                    ? const Color(0xFFFF0000)
+                                    : Colors.white38,
+                              ),
+                              if ((aps[0].rssi - aps[1].rssi).abs() < 5)
+                                MonoText(
+                                  '>> CLOSE SIGNAL STRENGTH — HIGHLY SUSPICIOUS',
+                                  fontSize: 7,
+                                  color: const Color(0xFFFF4444),
+                                ),
+                            ],
                           ],
                         ),
-                        if (n != net.networks.last) const RetroDivider(),
-                      ],
-                    ),
-                  );
-                }).toList(),
+                      );
+                    }).toList();
+                  })(),
+                ],
               ),
             ),
           ],
@@ -187,7 +360,8 @@ class AuditorScreen extends StatelessWidget {
 class _FingerprintRow extends StatelessWidget {
   final String label;
   final String value;
-  const _FingerprintRow(this.label, this.value);
+  final Color? color;
+  const _FingerprintRow(this.label, this.value, {this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -196,10 +370,10 @@ class _FingerprintRow extends StatelessWidget {
       child: Row(
         children: [
           SizedBox(
-            width: 120,
-            child: MonoText(label, fontSize: 10, color: Colors.white54),
+            width: 130,
+            child: MonoText(label, fontSize: 10, color: color ?? Colors.white54),
           ),
-          Expanded(child: MonoText(value, fontSize: 10)),
+          Expanded(child: MonoText(value, fontSize: 10, color: color ?? Colors.white)),
         ],
       ),
     );

@@ -44,6 +44,9 @@ class NetworkProvider extends ChangeNotifier {
   List<double> selectedRssiHistory   = [];
   List<double> selectedPacketHistory = [];
 
+  // ── Deauth targets (BSSIDs receiving deauth frames this second) ───────────
+  final Set<String> deauthTargets = {};
+
   // ── AP Selector ─────────────────────────────────────────────────────────
   String? selectedBssid;
   NetworkInfo? get selectedNetwork =>
@@ -137,6 +140,7 @@ class NetworkProvider extends ChangeNotifier {
     deauths          = 0;
     rssi             = -70;
     selectedBssid    = null;
+    deauthTargets.clear();
     _initHistoryBuffers();
     trustScore       = 100;
     threatLevel      = ThreatLevel.clear;
@@ -152,6 +156,15 @@ class NetworkProvider extends ChangeNotifier {
     final int probeReqs = (json['probe_reqs']       as num?)?.toInt() ?? 0;
     final int esp32Ts   = (json['timestamp']        as num?)?.toInt() ?? 0;
 
+    // Deauth targets — which BSSIDs received deauth frames this second
+    deauthTargets.clear();
+    final rawTargets = json['deauth_targets'];
+    if (rawTargets is List) {
+      for (final t in rawTargets) {
+        if (t is String && t.isNotEmpty) deauthTargets.add(t.toUpperCase());
+      }
+    }
+
     // Channel congestion
     final rawCh = json['channel_congestion'];
     if (rawCh is List) {
@@ -165,9 +178,13 @@ class NetworkProvider extends ChangeNotifier {
       final Map<String, NetworkInfo> deduped = {};
       for (final n in rawNets) {
         final info = NetworkInfo.fromJson(n as Map<String, dynamic>);
+        info.deauthTargeted = deauthTargets.contains(info.bssid.toUpperCase());
         final existing = deduped[info.bssid];
         if (existing == null || info.rssi > existing.rssi) {
           deduped[info.bssid] = info;
+        } else {
+          // Merge deauth flag
+          existing.deauthTargeted = existing.deauthTargeted || info.deauthTargeted;
         }
       }
       networks = deduped.values.toList();
@@ -179,12 +196,13 @@ class NetworkProvider extends ChangeNotifier {
       final target = networks.where((n) => n.bssid == selectedBssid).firstOrNull;
       if (target != null) {
         rssi = target.rssi.toDouble();
+        final apFrames = target.perApFrames;
         if (selectedRssiHistory.isEmpty) selectedRssiHistory = List.filled(60, -70, growable: true);
         if (selectedPacketHistory.isEmpty) selectedPacketHistory = List.filled(40, 0, growable: true);
         selectedRssiHistory.removeAt(0);
         selectedRssiHistory.add(rssi);
         selectedPacketHistory.removeAt(0);
-        selectedPacketHistory.add(packetsPerSec.toDouble());
+        selectedPacketHistory.add(apFrames.toDouble());
       }
     } else {
       if (networks.isNotEmpty) {
@@ -313,6 +331,9 @@ class NetworkProvider extends ChangeNotifier {
 
   List<double> get activePacketHistory =>
       selectedBssid != null ? selectedPacketHistory : packetHistory;
+
+  List<NetworkInfo> get deauthTargetedNetworks =>
+      networks.where((n) => n.deauthTargeted).toList();
 
   // ── Serial control ────────────────────────────────────────────────────────
   Future<void> connectSerial()    => _serial.connect();

@@ -32,6 +32,8 @@ class NetworkInfo {
   final int rssi;
   final int channel;
   final String ouiVendor;
+  final int perApFrames;
+  bool deauthTargeted;
 
   NetworkInfo({
     required this.ssid,
@@ -39,6 +41,8 @@ class NetworkInfo {
     required this.rssi,
     required this.channel,
     required this.ouiVendor,
+    this.perApFrames = 0,
+    this.deauthTargeted = false,
   });
 
   factory NetworkInfo.fromJson(Map<String, dynamic> json) {
@@ -48,6 +52,7 @@ class NetworkInfo {
       rssi: json['rssi'] ?? -70,
       channel: json['channel'] ?? 1,
       ouiVendor: json['oui_vendor'] ?? 'Unknown',
+      perApFrames: (json['frames'] as num?)?.toInt() ?? 0,
     );
   }
 }

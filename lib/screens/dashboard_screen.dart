@@ -78,8 +78,8 @@ class DashboardScreen extends StatelessWidget {
                     children: [
                       MonoText(
                         net.selectedBssid == null
-                            ? '>> SHOWING: GLOBAL PACKET RATE'
-                            : '>> SHOWING: PACKETS FOR ${net.selectedNetwork?.ssid ?? net.selectedBssid}',
+                            ? '>> SHOWING: GLOBAL MGMT FRAME RATE'
+                            : '>> SHOWING: MGMT FRAMES FOR ${net.selectedNetwork?.ssid ?? net.selectedBssid}',
                         fontSize: 9,
                         color: Colors.white54,
                       ),
@@ -94,8 +94,8 @@ class DashboardScreen extends StatelessWidget {
                 // ── Packet Count ──────────────────────────────────────────
                 RetroPanel(
                   title: net.selectedBssid == null
-                      ? 'PACKET COUNT — ALL NETWORKS'
-                      : 'PACKET COUNT — ${(net.selectedNetwork?.ssid ?? net.selectedBssid)!.toUpperCase()}',
+                      ? 'MGMT FRAMES — ALL NETWORKS'
+                      : 'MGMT FRAMES — ${(net.selectedNetwork?.ssid ?? net.selectedBssid)!.toUpperCase()}',
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -113,7 +113,7 @@ class DashboardScreen extends StatelessWidget {
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            'PKT/S',
+                            'FRAMES/S',
                             style: GoogleFonts.spaceMono(
                               color: Colors.white38,
                               fontSize: 14,
@@ -179,12 +179,12 @@ class DashboardScreen extends StatelessWidget {
                     Expanded(
                       child: RetroPanel(
                         title: 'RSSI',
-                        borderColor: const Color(0xFF39FF14),
+                        borderColor: _rssiColor(net.rssi),
                         child: MonoText(
-                          net.rssi.toStringAsFixed(0),
+                          '${net.rssi.toStringAsFixed(0)}',
                           fontSize: 28,
                           fontWeight: FontWeight.bold,
-                          color: const Color(0xFF39FF14),
+                          color: _rssiColor(net.rssi),
                         ),
                       ),
                     ),
@@ -218,7 +218,8 @@ class DashboardScreen extends StatelessWidget {
                   child: MonoText(
                     '01001110 01000101 01010100\n'
                     '>> MONITORING 2.4GHz BAND\n'
-                    '>> PROMISCUOUS MODE: ACTIVE\n'
+                    '>> MGMT FRAME SNIFFER: ACTIVE\n'
+                    '>> CHANNEL HOP: 1-13 @ 60ms\n'
                     '01010111 01001001 01000110 01001001',
                     fontSize: 8,
                     color: Colors.white24,
@@ -233,6 +234,14 @@ class DashboardScreen extends StatelessWidget {
       },
     );
   }
+}
+
+Color _rssiColor(double rssi) {
+  if (rssi > -50) return const Color(0xFF39FF14);   // EXCELLENT - green
+  if (rssi > -60) return const Color(0xFFBFFF00);   // GOOD - lime
+  if (rssi > -70) return const Color(0xFFFFFF00);   // FAIR - yellow
+  if (rssi > -80) return const Color(0xFFFF8800);   // POOR - orange
+  return const Color(0xFFFF0000);                     // DEAD - red
 }
 
 class _StatCell extends StatelessWidget {
