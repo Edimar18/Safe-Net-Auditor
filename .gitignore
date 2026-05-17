@@ -47,4 +47,5 @@ app.*.map.json
 PROJECT_CONTEXT.md
 ESP32-CODE.ino
 
-.commandcode/
+.commandcode/*
+.commandcode/taste
